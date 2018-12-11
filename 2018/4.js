@@ -1,12 +1,10 @@
-const fs = require('fs')
 const assert = require('assert').strict
 
-const {uniq, readLines, group, strpad, pairs} = require('./lib.js')
+const {readLines, strpad} = require('./lib.js')
 
 function load() {
   return readLines('inputs/4.txt').sort()
 }
-
 
 function drawGraph(sleepStates) {
   const LEFT_COL_WIDTH = 8
@@ -91,7 +89,7 @@ function part2(events) {
     log.forEach((isSleeping, minute) => guardsMinutesSpentAsleep[minute].add(guard, isSleeping ? 1 : 0))
   })
 
-  let highest = {guard: null, minute: -1, count: -1}
+  let highest = {guard: -1, minute: -1, count: -1}
 
   for (let minute = 0; minute < 60; ++minute) {
     let map = guardsMinutesSpentAsleep[minute]
@@ -103,7 +101,6 @@ function part2(events) {
   }
 
   return highest
-
 }
 
 let testData = `[1518-11-01 00:00] Guard #10 begins shift
