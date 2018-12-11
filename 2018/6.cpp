@@ -157,6 +157,29 @@ int part1(std::vector<Coordinate> coords) {
   return largestArea->area;
 }
 
+int part2(std::vector<Coordinate> coords, int32_t maxDistance) {
+  // loop through all x, y points on the grid and count the number of points
+  // where the sum of manhattan distances to all specificed coords
+  // is less than maxDistance
+
+  Coordinate topLeft;
+  Coordinate bottomRight;
+  std::tie(topLeft, bottomRight) = findCorners(coords);
+  int32_t area(0);
+
+  for (auto x = topLeft.x; x <= bottomRight.x; ++x) {
+    for (auto y = topLeft.y; y <= bottomRight.y; ++y) {
+      int32_t distanceSum(0);
+      for (auto & c : coords) {
+        auto dist = distanceBetween(c, x, y);
+        distanceSum += distanceBetween(c, x, y);
+      }
+      if (distanceSum < maxDistance) area++;
+    }
+  }
+  return area;
+}
+
 int main() {
   std::ifstream file("inputs/6.txt");
   auto coords = loadCoordinates(file);
@@ -167,9 +190,12 @@ int main() {
 
   draw(coords);
   int32_t part1Results = part1(coords);
-  assert(part1Results == 4589);
+  assert(4589 == part1Results);
   std::cout << "part 1: " << part1Results << std::endl;
 
-
+  assert(part2(testCoords, 32) == 16);
+  int32_t part2Results = part2(coords, 10000);
+  assert(40252 == part2Results);
+  std::cout << "part 2: " << part2Results << std::endl;
   return 0;
 }
