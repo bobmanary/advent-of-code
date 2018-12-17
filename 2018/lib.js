@@ -1,4 +1,5 @@
 const fs = require('fs')
+const util = require('util')
 
 exports.readLines = function load(file) {
   return fs.readFileSync(file, 'utf8')
@@ -82,4 +83,19 @@ exports.pipe = pipe
 
 exports.pairs = function pairs(object) {
   return Object.keys(object).map(key => [key, object[key]])
+}
+
+class FilledArray extends Array {
+  constructor(size, initialValue) {
+    super(size)
+    for (let i=0; i<size; i++) {
+      this[i] = typeof initialValue == 'function' ? initialValue(i, this) : initialValue;
+    }
+  }
+}
+
+exports.FilledArray = FilledArray
+
+exports.print = function() {
+  process.stdout.write(util.format.apply(this, arguments));
 }
