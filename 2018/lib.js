@@ -23,8 +23,8 @@ exports.uniq = function uniq(array) {
   return [...new Set(array)]
 }
 
-exports.strpad = (s, len = 5) => s.length < len ? s + ' '.repeat(len - s.length) : s
-
+exports.strpad =  (s, len = 5) => s.length < len ? s + ' '.repeat(len - s.length) : s
+exports.strpadr = (s, len = 5) => s.length < len ? ' '.repeat(len - s.length) + s : s
 
 exports.Range = class Range {
   constructor(start, end) {
