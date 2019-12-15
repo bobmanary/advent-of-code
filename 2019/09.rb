@@ -1,6 +1,6 @@
 require 'fiber'
 
-DEBUG=true
+DEBUG=false
 PRINT_STATE=false
 
 def decode(instruction)
@@ -60,19 +60,19 @@ class IntcodeComputer
       6 => -> (p1, p2) { puts "> JF #{p2}" if p1 == 0 && DEBUG; @jump_pointer = p2 if p1 == 0 },
       7 => -> (p1, p2, p3) { @program[p3] = p1 < p2 ? 1 : 0},
       8 => -> (p1, p2, p3) { @program[p3] = p1 == p2 ? 1 : 0},
-      9 => -> (p1) { @rel_base = p1 },
+      9 => -> (p1) { @rel_base += p1 },
       99 => -> { @state = State::HALTED }
     }
     @loaders = {
       1 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
-      # 1 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1], modes[1] == 0 ? @program[@program[@ip+2]] : @program[@ip+2], @program[@ip+3]]},
-      2 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1], modes[1] == 0 ? @program[@program[@ip+2]] : @program[@ip+2], @program[@ip+3]]},
-      3 => -> (modes) {[@program[@ip+1]]},
-      4 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1]]},
-      5 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1], modes[1] == 0 ? @program[@program[@ip+2]] : @program[@ip+2]]},
-      6 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1], modes[1] == 0 ? @program[@program[@ip+2]] : @program[@ip+2]]},
-      7 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1], modes[1] == 0 ? @program[@program[@ip+2]] : @program[@ip+2], @program[@ip+3]]},
-      8 => -> (modes) {[modes[0] == 0 ? @program[@program[@ip+1]] : @program[@ip+1], modes[1] == 0 ? @program[@program[@ip+2]] : @program[@ip+2], @program[@ip+3]]},
+      2 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
+      3 => -> (modes) {[load_arg(1, 1)]},
+      4 => -> (modes) {[load_arg(modes[0], 1)]},
+      5 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2)]},
+      6 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2)]},
+      7 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
+      8 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
+      9 => -> (modes) {[load_arg(modes[0], 1)]},
       99 => -> (modes) {[]}
     }
 
@@ -92,7 +92,7 @@ class IntcodeComputer
   private
   def load_arg(mode, ip_offset)
     # puts "LA #{mode}, #{ip_offset}"
-    val = if mode == 0
+    if mode == 0
       # position mode
       position = @program[@ip + ip_offset]
       @program[position]
@@ -104,8 +104,6 @@ class IntcodeComputer
       relative_offset = @program[@ip + ip_offset]
       @program[@rel_base + relative_offset]
     end
-    puts "load #{val}"
-    val
   end
 
   def get_input
