@@ -91,19 +91,18 @@ class IntcodeComputer
 
   private
   def load_arg(mode, ip_offset)
-    # puts "LA #{mode}, #{ip_offset}"
-    if mode == 0
+    address = if mode == 0
       # position mode
-      position = @program[@ip + ip_offset]
-      @program[position]
+      @program[@ip + ip_offset]
     elsif mode == 1
       # immediate mode
-      @program[@ip + ip_offset]
+      @ip + ip_offset
     elsif mode == 2
       # relative mode
       relative_offset = @program[@ip + ip_offset]
-      @program[@rel_base + relative_offset]
+      @rel_base + relative_offset
     end
+    @program[address]
   end
 
   def get_input
