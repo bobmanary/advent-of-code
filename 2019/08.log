@@ -1,0 +1,75 @@
+data = data.split('').map(i => parseInt(i, 10))
+Array(15000) [ 2, 2, 2, 2, 0, 1, 2, 2, 2, 0, … ]
+
+W = 25, H = 6
+6
+layers = []
+Array []
+
+layer = 0
+0
+offset = 0
+0
+while (offset < data.length) {
+  if (layers[layer] == undefined) layers[layer] = [];
+  layers[layer].push(data[offset])
+  offset++
+  if (layers[layer].length == W*H) {
+    layer++
+  }
+}
+99
+layers[0]
+Array(150) [ 2, 2, 2, 2, 0, 1, 2, 2, 2, 0, … ]
+
+layers[99]
+Array(150) [ 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, … ]
+
+leastZeros = layers.reduce((memo, l) => {if (l.reduce((lm, n) => lm + n) > memo.reduce((lm, n) => lm + n)) {return l} else {return memo}}, layers[0])
+Array(150) [ 2, 2, 2, 2, 0, 0, 2, 2, 2, 1, … ]
+
+layers.reduce((memo, layer) => {
+  if (layer.filter(i => i == 0).length < memo.filter(i => i == 0).length) {
+    return layer
+  } else {
+    return memo
+  }
+}, 0)
+TypeError: memo.filter is not a function
+debugger eval code:2:47
+layers.reduce((memo, layer) => {
+  if (layer.filter(i => i == 0).length < memo.filter(i => i == 0).length) {
+    return layer
+  } else {
+    return memo
+  }
+}, [])
+Array []
+
+layers.reduce((memo, layer) => {
+  if (layer.filter(i => i == 0).length < memo.filter(i => i == 0).length) {
+    return layer
+  } else {
+    return memo
+  }
+}, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,])
+Array(150) [ 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, … ]
+
+leastZeroes = layers.reduce((memo, layer) => {
+  if (layer.filter(i => i == 0).length < memo.filter(i => i == 0).length) {
+    return layer
+  } else {
+    return memo
+  }
+}, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,])
+Array(150) [ 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, … ]
+
+tt = leastZEroes.filter(n => n == 2).length
+ReferenceError: leastZEroes is not defined
+debugger eval code:1:1
+tt = leastZeroes.filter(n => n == 2).length
+124
+oo = leastZeroes.filter(n => n == 1).length
+19
+124 * 19
+2356
