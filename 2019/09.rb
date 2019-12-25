@@ -74,7 +74,7 @@ if ARGV[0] == '--test'
     {in: [11], out: [11], prog: [109, 1, 203, 2, 204, 2, 99]},
   ]
   extra_tests.each_with_index do |test, i|
-    puts "> program ##{i}: [#{test[:prog].join(', ')}]"
+    puts "> program ##{i}: [#{test[:prog].join(', ')}]" if DEBUG
     comp = IntcodeComputer.new test[:prog]
     comp.add_inputs test[:in]
     outputs = []
@@ -84,7 +84,7 @@ if ARGV[0] == '--test'
       end
     end
     puts "extra test #{i}: #{test[:out].eql?(outputs) ? 'pass' : 'fail'}"
-    puts "output: [#{outputs.join(',')}]"
+    puts "output: [#{outputs.join(',')}]" if DEBUG
     puts "============================" if DEBUG
   end
 end
@@ -101,5 +101,17 @@ if !ARGV.include?('--test')
       end
     end
     puts "day 9 part 1: #{outputs}"
+  end.call
+
+  -> do
+    comp = IntcodeComputer.new(load_program('inputs/09.txt'))
+    outputs = []
+    comp.add_inputs [2]
+    while comp.run
+      if comp.wait_output?
+        outputs << comp.consume_output
+      end
+    end
+    puts "day 9 part 2: #{outputs}"
   end.call
 end
