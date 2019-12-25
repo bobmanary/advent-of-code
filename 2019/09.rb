@@ -1,6 +1,6 @@
 require 'fiber'
 
-DEBUG=false
+DEBUG=!ENV['DEBUG'].nil?
 PRINT_STATE=false
 
 def decode(instruction)
@@ -26,8 +26,8 @@ def decode(instruction)
   [opcode, [m1, m2, m3], size]
 end
 
-def load_program
-  File.read('inputs/2019-07.txt').split(',').map &:to_i
+def load_program(path)
+  File.read(path).split(',').map &:to_i
 end
 
 class IntcodeComputer
@@ -39,7 +39,7 @@ class IntcodeComputer
     WAIT_OUTPUT = 4
   end
   
-  attr_accessor :program, :ip, :jump_pointer, :output, :halted, :opcodes, :loaders, :state
+  attr_accessor :program, :ip, :jump_pointer, :halted, :opcodes, :loaders, :state
 
   def initialize(new_program)
     @program = new_program.clone
@@ -93,14 +93,20 @@ class IntcodeComputer
   def load_arg(mode, ip_offset)
     address = if mode == 0
       # position mode
-      @program[@ip + ip_offset]
+      load_arg(1, ip_offset)
     elsif mode == 1
       # immediate mode
       @ip + ip_offset
     elsif mode == 2
       # relative mode
-      relative_offset = @program[@ip + ip_offset]
+      relative_offset = load_arg(1, ip_offset)
       @rel_base + relative_offset
+    end
+    if address > @program.size
+      puts "EXPANDING MEMORY TO #{address}"
+      @program.fill 0, @program.size, (address+1) - @program.size
+      puts "... #{@program.size}"
+      puts "#{@program[address]}"
     end
     @program[address]
   end
@@ -153,6 +159,7 @@ class IntcodeComputer
           end
         rescue StandardError => e
           puts "error at ip #{@ip}, #{@program[@ip]} (program size: #{@program.size})"
+          puts @program.join(',')
           raise e
         end
       end
@@ -181,22 +188,90 @@ class IntcodeComputer
   def wait_output?
     @state == State::WAIT_OUTPUT
   end
+
+  def consume_output
+    puts "consume_output #{@output}, state: #{@state}" if DEBUG
+    raise "Bad consume_output" if !wait_output? && !stopped?
+    out = @output
+    @output = nil
+    @state = State::RUNNING if !stopped?
+    out
+  end
 end
 
-
-
-# part 1
-part1 = [0,1,2,3,4].permutation.map do |phases|
-  puts "new phase #{phases.join ' '}" if DEBUG
-  phases.reduce(0) do |output, phase|
-    comp = IntcodeComputer.new(load_program)
-    comp.add_inputs([phase, output])
-    while comp.run
-      puts "- STATE #{comp.state}" if DEBUG
+if ARGV[0] == '--test'
+  day7_part1 = [0,1,2,3,4].permutation.map do |phases|
+    puts "new phase #{phases.join ' '}" if DEBUG
+    phases.reduce(0) do |output, phase|
+      comp = IntcodeComputer.new(load_program('inputs/2019-07.txt'))
+      comp.add_inputs([phase, output])
+      while comp.run
+        puts "- STATE #{comp.state}" if DEBUG
+      end
+      comp.consume_output
     end
-    comp.output
-    # IntcodeComputer.new(load_program).run([phase, output])
+  end.max
+  if day7_part1 != 880726
+    puts "day 7 test: failed" 
+    exit
+  else
+    puts "day 7 test: passed"
   end
-end.max
-raise "oh noes" if part1 != 880726
-puts "part 1: #{part1}"
+
+  -> do
+    initial_program = [109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99]
+    output = []
+    comp = IntcodeComputer.new initial_program
+    while comp.run
+      if comp.state == IntcodeComputer::State::WAIT_OUTPUT
+        output << comp.consume_output
+      end
+    end
+    puts "day 9 test 1: #{initial_program == output}"
+    if initial_program != output
+      max_len = [initial_program.size, output.size].max
+      puts "largest set: #{max_len}"
+      max_len.times do |i|
+        puts "#{initial_program[i]} | #{output[i]}"
+      end
+    end
+  end.call
+
+  -> do
+    initial_program = [1102,34915192,34915192,7,4,7,99,0]
+    output = []
+    comp = IntcodeComputer.new initial_program
+    while comp.run
+      if comp.state == IntcodeComputer::State::WAIT_OUTPUT
+        output << comp.consume_output
+      end
+    end
+    puts "day 9 test 2: #{output.size == 1}, #{output[0].to_s.size == 16}"
+  end.call
+
+
+  -> do
+    initial_program = [104,1125899906842624,99]
+    output = []
+    comp = IntcodeComputer.new initial_program
+    while comp.run
+      if comp.state == IntcodeComputer::State::WAIT_OUTPUT
+        output << comp.consume_output
+      end
+    end
+    puts "day 9 test 3: #{output.size == 1}, #{output[0] == 1125899906842624}"
+  end.call
+end
+
+# day 9 part 1
+-> do
+  comp = IntcodeComputer.new(load_program('inputs/09.txt'))
+  outputs = []
+  comp.add_inputs [1]
+  while comp.run
+    if comp.wait_output?
+      outputs << comp.consume_output
+    end
+  end
+  puts "day 9 part 1: #{outputs}"
+end.call
