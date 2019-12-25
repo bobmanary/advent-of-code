@@ -1,6 +1,6 @@
 require 'fiber'
 
-DEBUG=ENV['DEBUG'].present?
+DEBUG=!ENV['DEBUG'].nil?
 PRINT_STATE=false
 
 def decode(instruction)
@@ -125,8 +125,8 @@ class IntcodeComputer
           end
           (opcode, param_modes, instr_size) = decode(@program[@ip])
           arguments = @loaders[opcode].call(param_modes)
-          puts "ip #{@ip.to_s.rjust(3, '0')}, cmd #{@program.at(@ip).to_s.rjust(5, ' ')}, opcode #{opcode}, size #{instr_size}, mode #{param_modes.join(',')}, values #{arguments.join(',')}" if DEBUG
           @opcodes[opcode].call(*arguments)
+          puts "ip #{@ip.to_s.rjust(3, '0')}, cmd #{@program.at(@ip).to_s.rjust(5, ' ')}, opcode #{opcode}, size #{instr_size}, mode #{param_modes.join(',')}, values #{arguments.join(',')}" if DEBUG
           @ip += instr_size
           if PRINT_STATE
             puts @program.map {|v| v.to_s.rjust(5, '0')}.join(', ')

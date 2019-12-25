@@ -1,7 +1,7 @@
 require 'fiber'
 
 DEBUG=!ENV['DEBUG'].nil?
-PRINT_STATE=false
+PRINT_STATE=!ENV['PRINT_STATE'].nil?
 
 def decode(instruction)
   instruction_str = instruction.to_s.rjust(5, '0')
@@ -69,19 +69,19 @@ class IntcodeComputer
       # set true if arg 1 == arg 2
       8 => -> (p1, p2, p3) { @program[p3] = p1 == p2 ? 1 : 0},
       # add to relative base
-      9 => -> (p1) { @rel_base += p1 },
+      9 => -> (p1) { puts "> SET BASE #{@rel_base} + #{p1} = #{@rel_base + p1}" if DEBUG; @rel_base += p1 },
       # halt machine
       99 => -> { @state = State::HALTED }
     }
     @loaders = {
-      1 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
-      2 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
-      3 => -> (modes) {[load_arg(1, 1)]},
+      1 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_out_addr(modes[2], 3)]},
+      2 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_out_addr(modes[2], 3)]},
+      3 => -> (modes) {[load_out_addr(modes[0], 1)]},
       4 => -> (modes) {[load_arg(modes[0], 1)]},
       5 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2)]},
       6 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2)]},
-      7 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
-      8 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_arg(1, 3)]},
+      7 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_out_addr(modes[2], 3)]},
+      8 => -> (modes) {[load_arg(modes[0], 1), load_arg(modes[1], 2), load_out_addr(modes[2], 3)]},
       9 => -> (modes) {[load_arg(modes[0], 1)]},
       99 => -> (modes) {[]}
     }
@@ -113,12 +113,22 @@ class IntcodeComputer
       @rel_base + relative_offset
     end
     if address > @program.size
-      puts "EXPANDING MEMORY TO #{address}"
+      puts "EXPANDING MEMORY TO #{address}" if DEBUG
       @program.fill 0, @program.size, (address+1) - @program.size
-      puts "... #{@program.size}"
-      puts "#{@program[address]}"
+    end
+    if address < 0
+      raise "invalid address [#{address}]!"
     end
     @program[address]
+  end
+
+  def load_out_addr(mode, ip_offset)
+    addr = if mode == 0 || mode == 1
+      @program[@ip + ip_offset]
+    elsif mode == 2
+      rel_offset = load_arg(1, ip_offset)
+      actual_addr = @rel_base + rel_offset
+    end
   end
 
   def get_input
@@ -158,10 +168,9 @@ class IntcodeComputer
             @jump_pointer = nil
           end
           (opcode, param_modes, instr_size) = decode(@program[@ip])
-          # arguments = load_args(opcode, instr_size, param_modes)
           arguments = @loaders[opcode].call(param_modes)
-          puts "ip #{@ip.to_s.rjust(3, '0')}, cmd #{@program.at(@ip).to_s.rjust(5, ' ')}, opcode #{opcode}, size #{instr_size}, mode #{param_modes.join(',')}, values #{arguments.join(',')}" if DEBUG
           @opcodes[opcode].call(*arguments)
+          puts "ip #{@ip.to_s.rjust(3, '0')}, cmd #{@program.at(@ip).to_s.rjust(5, ' ')}, opcode #{opcode}, size #{instr_size}, mode #{param_modes.join(',')}, values #{arguments.join(',')}" if DEBUG
           @ip += instr_size
           if PRINT_STATE
             puts @program.map {|v| v.to_s.rjust(5, '0')}.join(', ')

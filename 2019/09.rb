@@ -62,20 +62,44 @@ if ARGV[0] == '--test'
     end
     puts "day 9 test 3: #{output.size == 1}, #{output[0] == 1125899906842624}"
   end.call
+
+  extra_tests = [
+    {in: [], out: [-1], prog: [109, -1, 4, 1, 99]},
+    {in: [], out: [1], prog: [109, -1, 104, 1, 99]},
+    {in: [], out: [109], prog: [109, -1, 204, 1, 99]},
+    {in: [], out: [204], prog: [109, 1, 9, 2, 204, -6, 99]},
+    {in: [], out: [204], prog: [109, 1, 109, 9, 204, -6, 99]},
+    {in: [], out: [204], prog: [109, 1, 209, -1, 204, -106, 99]},
+    {in: [999], out: [999], prog: [109, 1, 3, 3, 204, 2, 99]},
+    {in: [11], out: [11], prog: [109, 1, 203, 2, 204, 2, 99]},
+  ]
+  extra_tests.each_with_index do |test, i|
+    puts "> program ##{i}: [#{test[:prog].join(', ')}]"
+    comp = IntcodeComputer.new test[:prog]
+    comp.add_inputs test[:in]
+    outputs = []
+    while comp.run
+      if comp.state == IntcodeComputer::State::WAIT_OUTPUT
+        outputs << comp.consume_output
+      end
+    end
+    puts "extra test #{i}: #{test[:out].eql?(outputs) ? 'pass' : 'fail'}"
+    puts "output: [#{outputs.join(',')}]"
+    puts "============================" if DEBUG
+  end
 end
 
 # day 9 part 1
--> do
-  comp = IntcodeComputer.new(load_program('inputs/09.txt'))
-  outputs = []
-  comp.add_inputs [1]
-  while comp.run
-    puts 'continue'
-    if comp.wait_output?
-      outputs << comp.consume_output
-      puts "consume output, now: #{outputs.join(',')}"
+if !ARGV.include?('--test')
+  -> do
+    comp = IntcodeComputer.new(load_program('inputs/09.txt'))
+    outputs = []
+    comp.add_inputs [1]
+    while comp.run
+      if comp.wait_output?
+        outputs << comp.consume_output
+      end
     end
-  end
-  puts "final state: #{comp.state}"
-  puts "day 9 part 1: #{outputs}"
-end.call
+    puts "day 9 part 1: #{outputs}"
+  end.call
+end
