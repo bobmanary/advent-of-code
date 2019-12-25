@@ -1,6 +1,6 @@
 require 'fiber'
 
-DEBUG=false
+DEBUG=ENV['DEBUG'].present?
 PRINT_STATE=false
 
 def decode(instruction)
