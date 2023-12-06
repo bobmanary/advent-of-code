@@ -208,6 +208,10 @@ class IntcodeComputer
     @state == State::WAIT_OUTPUT
   end
 
+  def wait_input?
+    @state == State::WAIT_INPUT
+  end
+
   def consume_output
     puts "consume_output #{@output}, state: #{@state}" if DEBUG
     raise "Bad consume_output" if !wait_output? && !stopped?
