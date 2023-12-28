@@ -1,3 +1,4 @@
+require "./matrix"
 class Asciimage
   def initialize(@width : Int32, @height : Int32)
     @matrix = Matrix(Char).new(@width, @height, ' ')
@@ -5,11 +6,17 @@ class Asciimage
 
   def plot(x, y, char)
     @matrix[x, y] = char
+    self
+  end
+
+  def fill(x1, y1, x2, y2, char)
+    @matrix.fill(x1, y1, x2, y2, char)
+    self
   end
 
   def as_string
-    s = String.build do |io|
-      @matrix.each_row do |row|
+    String.build do |io|
+      @matrix.reverse_each_row do |row|
         row.each do |char|
           io << char
         end
