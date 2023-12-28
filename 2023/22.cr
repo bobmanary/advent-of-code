@@ -1,11 +1,12 @@
 require "./lib/matrix"
 require "./lib/asciimage"
 
-["inputs/22_example.txt"].each do |filename| #, "inputs/22.txt"
+["inputs/22_example.txt", "inputs/22.txt"].each do |filename| #
   bricks, max_x, max_y, max_z = parse(filename)
 
-  puts "#{filename} part 1: #{part1(bricks, max_x, max_y, max_z)}"
-  # puts "#{filename} part 2: #{part2(grid)}"
+  part1, part2 = calculate(bricks, max_x, max_y, max_z)
+  puts "#{filename} part 1: #{part1}"
+  puts "#{filename} part 2: #{part2}"
 end
 
 def parse(filename)
@@ -108,7 +109,7 @@ class Shuffler
 end
 
 
-def part1(bricks, max_x, max_y, max_z)
+def calculate(bricks, max_x, max_y, max_z)
   field = Matrix3(Brick | Nil).new(max_x + 1, max_y + 1, max_z + 1, nil)
   shuffle = Shuffler.new
 
@@ -141,8 +142,9 @@ def part1(bricks, max_x, max_y, max_z)
     image.fill(brick.y1 + img_offset3, brick.z1, brick.y2 + img_offset3, brick.z2, char)
   end
 
-  # image.render
+  image.render
 
+  # part 1 + first pass to mapping supports
   # see which bricks are either
   # 1) not supporting other bricks, or
   # 2) not supporting any bricks with no other supports
@@ -172,6 +174,31 @@ def part1(bricks, max_x, max_y, max_z)
     end
   end
 
-  disintegratable_bricks.size
+  # part 2
+  brick_chain_reaction_sum = 0
+  bricks.each do |brick|
+    previously_seen_ids = Set(Int32).new
+    previously_seen_ids << brick.id
+    falling_ids = Set(Int32).new
+    supported_count = traverse_up(brick, previously_seen_ids, falling_ids)
+    brick_chain_reaction_sum += falling_ids.size
+  end
+
+  return disintegratable_bricks.size, brick_chain_reaction_sum
 end
 
+def traverse_up(brick, previously_seen_ids, falling_ids)
+  return if brick.supported_bricks.size == 0
+
+  brick.supported_bricks.each do |upper_brick|
+    fully_supported_by_falling_bricks = upper_brick.supported_by.all? do |lower_brick|
+      falling_ids.includes?(lower_brick.id)
+    end
+
+    previously_seen_ids << upper_brick.id
+    if upper_brick.supported_by.size == 1 || fully_supported_by_falling_bricks
+      falling_ids << upper_brick.id
+      traverse_up(upper_brick, previously_seen_ids, falling_ids)
+    end
+  end
+end
