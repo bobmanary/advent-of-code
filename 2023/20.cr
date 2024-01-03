@@ -2,11 +2,12 @@
   graph = parse(filename)
   puts "#{filename} part 1: #{part1(graph)}"
 
-  # graph = parse(filename)
-  # puts "#{filename} part 2: #{part2(graph)}"
+  next unless filename == "inputs/20.txt"
+  graph = parse(filename, true)
+  puts "#{filename} part 2: #{part2(graph)}"
 end
 
-def parse(filename)
+def parse(filename, find_output_nodes : Bool = false)
   graph = Graph.new
   nodes = File.read(filename).lines.map do |line|
     label, _, outputs = line.partition(" -> ")
@@ -17,7 +18,7 @@ def parse(filename)
     end
   end.to_h
   graph.add_nodes({"output" => Output.new("output", [] of String, graph)})
-  graph.add_nodes(nodes)
+  graph.add_nodes(nodes, find_output_nodes)
 end
 
 enum Pulse
@@ -26,61 +27,83 @@ enum Pulse
 end
 
 class Graph
-  getter queue, pulse_count
+  getter queue, pulse_count, nodes
+  getter conjunctions : Hash(String, Conjunction)
 
   def initialize
     @nodes = Hash(String, Node).new
+    @conjunctions = Hash(String, Conjunction).new
     @queue = Deque({String, Pulse, Array(String)}).new
     @pulse_count = StaticArray(Int32, 2).new(0)
   end
 
-  def add_nodes(nodes)
+  def add_nodes(nodes, find_output_nodes : Bool = false)
     @nodes.merge! nodes
     nodes.each do |name, node|
       node.outputs.each do |target|
         @nodes[target].connect_input(name) if @nodes.has_key?(target)
       end
     end
+
+    if find_output_nodes
+      final_conjunction = @nodes.find {|k, node| node.outputs == ["rx"] }
+      raise "could not find output to rx" if final_conjunction.nil?
+
+      @nodes.each do |name, node|
+        @conjunctions[name] = node if node.is_a?(Conjunction) && node.outputs == [final_conjunction[0]]
+      end
+    end
+
     self
   end
 
   def push_button
-    send("button", Pulse::Low, ["broadcaster"])
+    send_pulse("button", Pulse::Low, ["broadcaster"])
   end
 
-  def send(source_name, pulse, outputs)
-    # outputs.each do |target|
-    #   ptext = pulse == Pulse::High ? "high" : "low"
-    #   # puts "#{source_name} -#{ptext}-> #{target}"
-    # end
-    # puts "#{source.name} #{pulse.value} #{outputs.join(",")}"
+  def send_pulse(source_name, pulse, outputs)
     @pulse_count[pulse.value] += outputs.size
     @queue.push({source_name, pulse, outputs})
   end
 
   def process
-    rx_count = 0
     while !@queue.empty?
       source_name, pulse, outputs = queue.shift
       outputs.each do |target|
-        if target == "rx"
-          rx_count += 1
+        if @nodes.has_key?(target)
+          @nodes[target].receive_pulse(pulse, source_name)
         end
-        @nodes[target].receive(pulse, source_name) if @nodes.has_key?(target)
       end
     end
-    rx_count
+  end
+
+  def process(&block)
+    # same as process(), but call a block when one of the final conjunctions to output
+    # receives a high pulse
+    while !@queue.empty?
+      source_name, pulse, outputs = queue.shift
+      outputs.each do |target|
+        if @nodes.has_key?(target)
+          @nodes[target].receive_pulse(pulse, source_name)
+          if pulse.high? && @conjunctions.has_key?(source_name)
+            yield @nodes[source_name]
+          end
+        end
+      end
+    end
   end
 end
 
 abstract class Node
-  getter name
+  getter name : String
   getter! outputs : Array(String)
-  abstract def initialize(@name : String, @outputs : Array(String), @graph : Graph)
+  def initialize(@name : String, @outputs : Array(String), @graph : Graph)
+  end
 
-  abstract def receive(pulse : Pulse, from : String)
-  def send(pulse : Pulse)
-    @graph.send(self.name, pulse, @outputs.not_nil!)
+  abstract def receive_pulse(pulse : Pulse, from : String)
+
+  def send_pulse(pulse : Pulse)
+    @graph.send_pulse(self.name, pulse, @outputs.not_nil!)
   end
 
   def connect_input(name)
@@ -93,10 +116,11 @@ class FlipFlop < Node
   def initialize(@name : String, @outputs : Array(String), @graph : Graph)
     @state = false
   end
-  def receive(pulse, from)
+
+  def receive_pulse(pulse : Pulse, from : String)
     if pulse == Pulse::Low
       @state = !@state
-      send(@state ? Pulse::High : Pulse::Low)
+      send_pulse(@state ? Pulse::High : Pulse::Low)
     end
   end
 end
@@ -106,37 +130,40 @@ class Conjunction < Node
     @state = Hash(String, Pulse).new(Pulse::Low)
   end
 
-  # maybe wrong?
-  def receive(pulse, from)
+  def receive_pulse(pulse : Pulse, from : String)
     @state[from] = pulse
     high_count = @state.values.count(Pulse::High)
     if high_count == @state.size
-      send(Pulse::Low)
+      send_pulse(Pulse::Low)
     else
-      send(Pulse::High)
+      send_pulse(Pulse::High)
     end
   end
 
   def connect_input(name)
     @state[name] = Pulse::Low
   end
+
+  def high_pulse_count
+    @state.values.count(Pulse::High)
+  end
 end
 
 class Broadcaster < Node
   def initialize(@name : String, @outputs : Array(String), @graph : Graph)
   end
-  def receive(pulse, from)
-    send(pulse)
+  def receive_pulse(pulse : Pulse, from : String)
+    send_pulse(pulse)
   end
 end
 
 class Output < Node
   def initialize(@name : String, @outputs : Array(String), @graph : Graph)
   end
-  def receive(pulse, from)
+
+  def receive_pulse(pulse : Pulse, from : String)
   end
 end
-
 
 def part1(graph)
   1000.times do
@@ -147,16 +174,24 @@ def part1(graph)
 end
 
 def part2(graph)
-  puts "\n"
-  i = 0u32
-  loop do
-    graph.push_button
+  first_high_pulses = Hash(String, UInt64).new
+  i = 0u64
+
+  while first_high_pulses.size < graph.conjunctions.size
     i += 1
-    if graph.process == 0
-      break
+    graph.push_button
+    graph.process do |node|
+      next if first_high_pulses.has_key?(node.name)
+      # puts "#{node.name} sent high pulse at #{i}"
+      first_high_pulses[node.name] = i
     end
-    print "\r#{i}" if i%10000 == 0
   end
-  print "\n"
-  i
+  lcm(first_high_pulses.values)
+end
+
+def lcm(numbers)
+  a = numbers[0]
+  return a if numbers.size == 1
+  b = lcm(numbers[1..])
+  a.lcm(b)
 end
