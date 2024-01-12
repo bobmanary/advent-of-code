@@ -1,12 +1,6 @@
-["inputs/15_example.txt", "inputs/15.txt"].each do |filename| #
-  input = load(filename)
+require "benchmark"
 
-  puts "#{filename} part 1: #{part1(input)}"
-
-  puts "#{filename} part 2: #{part2(input)}"
-end
-
-def load(filename)
+def parse(filename)
   File.read(filename).chomp.chars
 end
 
@@ -72,6 +66,20 @@ def part2(input)
     next acc if box.empty?
     acc + box.each_with_index.reduce(0) do |acc2, ((label, focal_length), slot_number)|
       acc2 + ((1 + box_number) * (1 + slot_number) * focal_length)
+    end
+  end
+end
+
+Benchmark.ips do |x|
+  ["inputs/15_example.txt", "inputs/15.txt"].each do |filename|
+    input = parse(filename)
+
+    x.report("#{filename} part 1") do
+      part1(input)
+    end
+
+    x.report("#{filename} part 2") do
+      part2(input)
     end
   end
 end
