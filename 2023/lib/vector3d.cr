@@ -63,14 +63,6 @@ class Vector3d(T)
     Vector2d(T).new(axes[0], axes[1])
   end
 
-  def rotate90(around_axis : Symbol)
-    if symbol == :z
-
-    else
-      raise "not implemented!"
-    end
-  end
-
   def dot(other)
     @x * other.x + @y * other.y + @z * other.z
   end
@@ -110,7 +102,6 @@ class Vector3d(T)
   def angle(other)
     m_a = magnitude
     m_b = other.magnitude
-    puts "#{m_a} #{m_b} #{dot(other)}"
     radians = Math.acos(dot(other) / (m_a * m_b))
     radians * (180/Math::PI)
   end

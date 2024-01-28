@@ -1,5 +1,6 @@
 require "./lib/vector3d"
 require "./lib/gnuplot"
+require "./lib/input_loop"
 
 alias Vec3 = Vector3d(Float64)
 
@@ -138,6 +139,8 @@ class Line
     if a == b
       a
     elsif (a - b).magnitude < 0.00001
+      # this was copied from another implementation and should never be true,
+      # since nearest_points already handles small magnitudes
       (a + b) / 2.0
     else
       nil
@@ -221,6 +224,10 @@ class Line
   def to_2d_vector
     {@p.to_2d(exclude: :z), direction.to_2d(exclude: :z)}
   end
+
+  def direction_2d
+    @q.to_2d(exclude: :z) - @p.to_2d(exclude: :z)
+  end
 end
 
 def parse(input)
@@ -302,16 +309,41 @@ def part2(lines, boundary_max, max_iterations, use_proportional_iteration : Bool
   # line and iterate through points on lines 1 and 2 until arriving at a "throw" line
   # that intersects all 3
   
-  lines = lines.sort { |a, b| a.segment_midpoint <=> b.segment_midpoint }
+  # lines = lines.sort { |a, b| a.segment_midpoint <=> b.segment_midpoint }
+  lines = lines.sort_by { |line| line.direction.magnitude }
+  
 
+  # similar_lines : {String, Int32 } = lines.map do |acc, line1|
+  #   sum = lines.reduce(0) do |acc, line2|
+  #     if line1 == line2
+  #       acc
+  #     else
+  #       angle = line1.direction.angle(line2.direction)
+  #       angle < 5.0 || angle >= 175.0 ? acc + 1 : acc
+  #     end
+  #     # n1 = line1.direction_2d.normalize
+  #     # n2 = line2.direction_2d.normalize
+  #     # if n1 == n2 || n1 == n2 * -1.0
+  #     #   puts "#{line1} and #{line2} are parallel"
+  #     # end
+  #   end
+  #   {line1.to_s, sum}
+  # end
+
+  # pp similar_lines
+
+  # return
   # assume number of lines >= 3
-  l1 = lines.first
-  l2 = lines.last
-  l3 = lines[lines.size // 2]
+  midpoint = lines.size // 2
+  l1 = lines[midpoint - 1]
+  l2 = lines[midpoint + 1]
+  l3 = lines[midpoint]
+
+  puts "Using lines: #{l1}\n#{l2}\n#{l3}"
 
   if use_proportional_iteration
     puts "use proportional"
-    throw_line = find_proportional_iteration(l1, l2, l3)
+    throw_line = find_proportional_iteration(lines, l1, l2, l3)
   else
     puts "use full"
     throw_line = find_full_iteration(l1, l2, l3, boundary_max)
@@ -329,16 +361,29 @@ def part2(lines, boundary_max, max_iterations, use_proportional_iteration : Bool
     # make sure first point is closer to origin
     throw_line.q, throw_line.p = throw_line.p, throw_line.q
   end
-  throw_line.p = throw_line.p - throw_line.direction * max_iterations
+  vec = throw_line.direction
+  throw_line.p = throw_line.p - vec
+  throw_line.q = throw_line.q + vec
   puts throw_line
 
 
-  lines.each_with_index do |l1|
-    intersection = l1.intersection(throw_line)
-    if intersection.nil?
-      puts "no intersection"
-    else
-      puts "intersection at #{intersection}, time: #{time_at_position(l1, intersection)}ns"
+  # wtf = [l1, l2, l3]
+  File.open("temp/24_distances.dat", "w") do |file|
+    lines.each_with_index do |l1|
+      intersection = l1.intersection(throw_line)
+      if intersection.nil?
+        # puts "no intersection (distance: #{l1.skew_lines_distance(throw_line)})"
+        np1, np2 = l1.nearest_points(throw_line)
+        # puts "                           #{Line.new(np1, np2).direction.magnitude}"
+        if np1 == np2 || (np2 - np1).magnitude < 1.0
+          puts "found a close match at #{np2} #{(np2 - np1).magnitude}"
+          puts "  with line: #{l1}"
+        end
+        file.print("#{np1}\n#{np2}\n")
+      else
+        puts "intersection at #{intersection}, time: #{time_at_position(l1, intersection)}ns"
+        puts "  line: #{l1}"
+      end
     end
   end
 
@@ -393,15 +438,67 @@ def time_at_position(line, position)
   v = line.direction
   m_step = v.magnitude
   m_intersection = Line.new(line.p, position).direction.magnitude
-  (m_intersection / m_step).round.to_i
+  (m_intersection / m_step).round.to_i64
 end
 
-def find_proportional_iteration(l1, l2, l3) : Line?
+def find_proportional_iteration(lines, l1, l2, l3) : Line?
   # scan points between l1 and l2 until the resulting line intersects with l3,
   # using a PID controller to converge on an intersection without having to
   # iterate through every point
-  throw_line = l1
+
+  i = 0
+  j = 0
+  next_multiplier = 1
+
+  throw_line, distance, offset1, offset2 = interactive_intersection_finder(lines, l1, l2, l3)
+  pos1 = l1.p + l1.direction * offset1.to_f64
+  pos2 = l2.p + l2.direction * offset2.to_f64
+
+  puts <<-MSG
+
+  Interactive method found #{throw_line}
+                           #{pos1} #{pos2}
+  Distance: #{distance} units
+
+  Beginning iterative search for exact match...
+
+  MSG
+
+  throw_line.p = pos1
+  throw_line.q = pos2
+  refined_line = throw_line
+  vec1 = l1.direction
+  vec2 = l2.direction
+  pos1 = throw_line.p
+  pos2 = throw_line.q
+  rmin = -10000
+  rmax = 10000
+  dist2 = 0f64
+  gmin = Float64::MAX
+  # (rmin..rmax).each do |i|
+  (-2866..-2866).each do |i|
+    min_dist = Float64::MAX
+    pos1b = pos1 + vec1 * i.to_f
+    # (rmin..rmax).each do |j|
+    (-9359..-9359).each do |j|
+      pos2b = pos2 + vec2 * j.to_f
+      refined_line = Line.new(pos1b, pos2b)
+      dist2 = refined_line.skew_lines_distance(l3)
+      if dist2 < 0.00001
+        puts "found a line! (#{dist2}) - i #{i}, j #{j}"
+        return refined_line
+      end
+      min_dist = Math.min(dist2, min_dist)
+    end
+    gmin = min_dist if min_dist < gmin
+    puts "#{min_dist}  #{gmin}  (#{i})" if min_dist < 1.0
+  end
+
+  return
+
   pos1 = l1.p.clone
+  pos2 = l2.p.clone
+  throw_line = Line.new(pos1.clone, pos2.clone)
   vec1 = l1.direction
   vec2 = l2.direction
   found = false
@@ -477,7 +574,7 @@ def find_proportional_iteration(l1, l2, l3) : Line?
         # put some sort of breaker in here to check if the pid controller is causing
         # oscillations
       end
-      puts "#{j} #{pos1} #{min * format_divisor} #{max * format_divisor}"
+      puts "#{j} #{pos1} #{pos2} #{min}"
       j += 1
       break if found
       pos1 = pos1 + vec1 * debug_vec_multiplier
@@ -519,4 +616,147 @@ class PidController
 
   end
 
+end
+
+def create_vector_files(lines, l1, l2, l3)
+  all_file = File.tempfile("24_allvectors", ".dat")
+  lines.each do |line|
+    next if line == l1 || line == l2 || line == l3
+    all_file.print "#{line.q} #{line.direction}\n"
+  end
+  all_file.flush
+
+  target_file = File.tempfile("24_targetvectors", ".dat")
+
+  target_file.print "#{l1.q} #{l1.direction}\n"
+  target_file.print "#{l2.q} #{l2.direction}\n"
+  target_file.print "#{l3.q} #{l3.direction}\n"
+  target_file.flush
+  {all_file, target_file}
+end
+
+def write_throw_line(line, file)
+  p1 = line.p
+  p2 = line.q
+  if p1.magnitude > p2.magnitude
+    line = Line.new(p2, p1)
+  end
+  file.rewind
+  file.truncate
+  file.print "#{line.p}\n#{line.p + line.direction * 2.0}"
+  file.flush
+end
+
+def get_plotter(all_vectors_file, target_vectors_file, drawn_line_file)
+  plot_command = <<-PLOT
+  set term qt 0
+  splot '#{all_vectors_file.path}' using 1:2:3:($4*400000000000):($5*400000000000):($6*400000000000) with vector, \\
+  '#{target_vectors_file.path}' using 1:2:3:($4*400000000000):($5*400000000000):($6*400000000000) with vector, \\
+  '#{drawn_line_file.path}' with linespoints linewidth 2
+
+  PLOT
+  Gnuplot::Control.new(plot_command)
+end
+
+def max(a : UInt64, b : UInt64) : UInt64
+  if a > b
+    a
+  else
+    b
+  end
+end
+
+def min(a : UInt64, b : UInt64) : UInt64
+  if a < b
+    a
+  else
+    b
+  end
+end
+
+def interactive_intersection_finder(lines, l1, l2, l3)
+  puts <<-HELP
+  GNUPLOT INTERACTIVE LINE INTERSECTION FINDER
+  Uses Gnuplot to visualize line intersections in 3D.
+  Press a/e to move pos1 along line1 or pos2 along line2.
+  Press w to increase the magnitude of point movements along their respective line, and s to decrease.
+  Press spacebar to swap between lines.
+  A new line will be drawn between pos1 and pos2, projecting out towards line 3.
+  Try to make the new line intersect with line 3.
+  Hit enter when you're satisfied with how close the lines are. 
+  Try to shoot for a distance close to 1 (or smaller!).
+  HELP
+
+  pos1 = l1.p.clone
+  pos2 = l2.p.clone
+  # pos1 = Vec3.new(343687771508360f64, 289992578065459f64, 319549392507162f64) # found via gnuplot method
+  # pos2 = Vec3.new(236645926609322f64, 253593827042829f64, 190995920643689f64)
+  throw_line = Line.new(pos1.clone, pos2.clone)
+  vec1 = l1.direction
+  vec2 = l2.direction
+  found = false
+
+  all_vec_file, target_vec_file = create_vector_files(lines, l1, l2, l3)
+  throw_line_file = File.tempfile("24_throw_line", ".dat")
+
+  write_throw_line(throw_line, throw_line_file)
+
+  gnuplot = get_plotter(all_vec_file, target_vec_file, throw_line_file)
+
+  positions =         [pos1, pos2]
+  offsets =           [738973779950u64, 218999979956u64] #[0u64, 0u64] # 
+  initial_positions = [pos1, pos2]
+  vectors =           [vec1, vec2]
+  distance = throw_line.skew_lines_distance(l3)
+  active_pos = 0 # or 1
+  magnitude = 1000000000u64
+  should_exit = false
+  input = InputLoop.new
+  input.on(InputLoop::EventType::Enter) { should_exit = true }
+  input.on(InputLoop::EventType::Space) { active_pos = active_pos == 0 ? 1 : 0 }
+  input.on(InputLoop::EventType::Up) { magnitude = min(100000000000000u64, magnitude * 10) }
+  input.on(InputLoop::EventType::Down) { magnitude = max(1u64, magnitude // 10) }
+  input.on(InputLoop::EventType::Right) do
+    line_offset = offsets[active_pos]
+    line_offset += magnitude if UInt64::MAX - magnitude >= line_offset
+    position = initial_positions[active_pos] + vectors[active_pos] * line_offset.to_f64
+    positions[active_pos] = position
+    offsets[active_pos] = line_offset
+    # positions[active_pos] = positions[active_pos] + vectors[active_pos] * magnitude.to_f64
+  end
+  input.on(InputLoop::EventType::Left) do
+    line_offset = offsets[active_pos]
+    if magnitude <= line_offset
+      line_offset -= magnitude 
+    else
+      line_offset = 0u64
+    end
+    position = initial_positions[active_pos] + vectors[active_pos] * line_offset.to_f64
+    positions[active_pos] = position
+    offsets[active_pos] = line_offset
+    # positions[active_pos] = positions[active_pos] - vectors[active_pos] * magnitude.to_f64
+  end
+
+  input.loop do
+    if should_exit
+      throw_line_file.delete
+      all_vec_file.delete
+      target_vec_file.delete
+      gnuplot.close
+      return throw_line, distance, offsets[0], offsets[1]
+    end
+    throw_line = Line.new(positions[0], positions[1])
+    distance = throw_line.skew_lines_distance(l3)
+    write_throw_line(throw_line, throw_line_file)
+    puts <<-STATUS
+    Status:
+      active: pos#{active_pos}
+      pos1: #{positions[0]}
+      pos2: #{positions[1]}
+      offsets: #{offsets[0]} #{offsets[1]}
+      distance: #{distance}
+      multiplier: #{magnitude}
+    STATUS
+    gnuplot.replot
+  end
 end
