@@ -26,6 +26,7 @@ class Line
     @q = Vec3.new(components[3], components[4], components[5])
   end
 
+  # get the point of intersections between two lines, ignoring one dimension
   def intersects_2d?(other : Line, exclude : Symbol)
     # https://www.topcoder.com/thrive/articles/Geometry%20Concepts%20part%202:%20%20Line%20Intersection%20and%20its%20Applications#LineLineIntersection
 
@@ -72,6 +73,7 @@ class Line
     end
   end
 
+  # get the closest distance between two non-intersecting, non-parallel lines
   def skew_lines_distance(other)
     u1 = direction
     u2 = other.direction
@@ -145,59 +147,6 @@ class Line
     else
       nil
     end
-  end
-
-  def intersects?(other) : { Bool, Vec3 }
-    distance = skew_lines_distance(other)
-
-    puts "   d: #{distance}"
-    # first check if lines have an exact intersection point
-    # do it by checking if the shortest distance is exactly 0
-    if distance == 0f64
-      puts "3d lines have exact intersection point"
-      c = @q
-      d = other.q
-      e = @p - @q
-      f = other.p - other.q
-      g = d - c
-
-      # puts p
-      # puts q
-      puts f
-      puts g
-      # puts e
-      fg_cross = f.cross(g)
-      fe_cross = f.cross(e)
-
-      if fg_cross.magnitude == 0 || fe_cross.magnitude == 0
-        puts "lines #{self} and #{other} have no intersection, are they parallel?"
-        return false, Vec3.new(0f64, 0f64, 0f64)
-      end
-      fg_cross.normalize!
-      fe_cross.normalize!
-
-      dir_sign = fg_cross == fe_cross ? 1 : -1
-
-      puts f.cross(g)
-      puts f.cross(e)
-      puts "[#{c}] + [#{e}] * #{dir_sign} * ( #{f.cross(g).magnitude} / #{f.cross(e).magnitude})"
-      intersection = c + e * dir_sign * ( f.cross(g).magnitude / f.cross(e).magnitude)
-      return true, intersection
-    end
-
-    if distance > 0.00001
-      return false, Vec3.new(0f64, 0f64, 0f64)
-    end
-
-    # try to calculate the approximate intersection point
-    x1, x2 = nearest_points(other)
-
-    # if !first_is_done || !second_is_done
-    #   return false, Vec3.new(0f64, 0f64, 0f64)
-    # end
-
-    intersection = (x1 + x2) / 2f64
-    return true, intersection
   end
 
   def segment_midpoint
@@ -374,15 +323,18 @@ def part2(lines, boundary_max, max_iterations, use_proportional_iteration : Bool
       if intersection.nil?
         # puts "no intersection (distance: #{l1.skew_lines_distance(throw_line)})"
         np1, np2 = l1.nearest_points(throw_line)
+        dist = (np2 - np1).magnitude
         # puts "                           #{Line.new(np1, np2).direction.magnitude}"
-        if np1 == np2 || (np2 - np1).magnitude < 1.0
-          puts "found a close match at #{np2} #{(np2 - np1).magnitude}"
-          puts "  with line: #{l1}"
+        if np1 == np2 || dist < 1.0
+          puts "? found a close match at #{np2} (#{dist})"
+          puts "     with line: #{l1}"
+        else
+          puts "-  #{dist}"
         end
         file.print("#{np1}\n#{np2}\n")
       else
-        puts "intersection at #{intersection}, time: #{time_at_position(l1, intersection)}ns"
-        puts "  line: #{l1}"
+        puts "! intersection at #{intersection}, time: #{time_at_position(l1, intersection)}ns"
+        puts "    line: #{l1}"
       end
     end
   end
@@ -450,6 +402,8 @@ def find_proportional_iteration(lines, l1, l2, l3) : Line?
   j = 0
   next_multiplier = 1
 
+  lines = lines - [l1, l2, l3]
+
   throw_line, distance, offset1, offset2 = interactive_intersection_finder(lines, l1, l2, l3)
   pos1 = l1.p + l1.direction * offset1.to_f64
   pos2 = l2.p + l2.direction * offset2.to_f64
@@ -471,30 +425,53 @@ def find_proportional_iteration(lines, l1, l2, l3) : Line?
   vec2 = l2.direction
   pos1 = throw_line.p
   pos2 = throw_line.q
-  rmin = -10000
-  rmax = 10000
+  rmin = -40000
+  rmax = 40000
   dist2 = 0f64
   gmin = Float64::MAX
-  # (rmin..rmax).each do |i|
-  (-2866..-2866).each do |i|
+  matches = [] of Line
+  # found a line! (0.0) - i 9604, j 31363
+  (rmin..rmax).each do |i|
+  # (-2866..-2866).each do |i|
     min_dist = Float64::MAX
     pos1b = pos1 + vec1 * i.to_f
-    # (rmin..rmax).each do |j|
-    (-9359..-9359).each do |j|
+    (rmin..rmax).each do |j|
+    # (-9359..-9359).each do |j|
       pos2b = pos2 + vec2 * j.to_f
       refined_line = Line.new(pos1b, pos2b)
       dist2 = refined_line.skew_lines_distance(l3)
       if dist2 < 0.00001
-        puts "found a line! (#{dist2}) - i #{i}, j #{j}"
-        return refined_line
+        puts "!  found a line! (#{dist2}) - i #{i}, j #{j}"
+        exact = 0
+        close = 0
+        lines.each do |other|
+          int = refined_line.intersection(other)
+          if !int.nil?
+            exact += 1
+          elsif refined_line.skew_lines_distance(other) < 1.0
+            close += 1
+          end
+        end
+        puts "   (exact intersections: #{exact}, close: #{close})"
+        matches << refined_line
+        # return refined_line
       end
       min_dist = Math.min(dist2, min_dist)
     end
     gmin = min_dist if min_dist < gmin
-    puts "#{min_dist}  #{gmin}  (#{i})" if min_dist < 1.0
+    puts "   #{min_dist}  #{gmin}  (#{i})" if i % 250 == 0 || min_dist < 0.02
   end
 
-  return
+  puts "\nall matching lines:"
+  matches.each_with_index do |line, i|
+    puts "#{i}: #{line}"
+  end
+  puts "\npick a line by index:"
+  match_id = STDIN.gets.as(String)
+  return matches[match_id.chomp.to_i]
+  puts "\n\n"
+
+
 
   pos1 = l1.p.clone
   pos2 = l2.p.clone
