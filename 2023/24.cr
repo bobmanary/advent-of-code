@@ -1,6 +1,7 @@
 require "./lib/vector3d"
 require "./lib/gnuplot"
 require "./lib/input_loop"
+require "./24_plotting_extras"
 
 alias Vec3 = Vector3d(Float64)
 
@@ -259,34 +260,32 @@ def part2(lines, boundary_max, max_iterations, use_proportional_iteration : Bool
   # that intersects all 3
   
   # lines = lines.sort { |a, b| a.segment_midpoint <=> b.segment_midpoint }
-  lines = lines.sort_by { |line| line.direction.magnitude }
-  
 
-  # similar_lines : {String, Int32 } = lines.map do |acc, line1|
-  #   sum = lines.reduce(0) do |acc, line2|
-  #     if line1 == line2
-  #       acc
-  #     else
-  #       angle = line1.direction.angle(line2.direction)
-  #       angle < 5.0 || angle >= 175.0 ? acc + 1 : acc
-  #     end
-  #     # n1 = line1.direction_2d.normalize
-  #     # n2 = line2.direction_2d.normalize
-  #     # if n1 == n2 || n1 == n2 * -1.0
-  #     #   puts "#{line1} and #{line2} are parallel"
-  #     # end
-  #   end
-  #   {line1.to_s, sum}
-  # end
+  opposite_lines = Hash(Line, Array(Line)).new
+  perpendicular_lines = Hash(Line, Array(Line)).new
+  lines.each_with_index do |line1, i|
+    opposite_lines[line1] = [] of Line
+    perpendicular_lines[line1] = [] of Line
+    lines.each_with_index do |line2, j|
+      next if line1 == line2
+      angle = line1.direction.angle(line2.direction)
+      opposite_lines[line1] << line2 if angle > 170
+      perpendicular_lines[line1] << line2 if angle > 39 && angle < 51
+    end
+  end
 
-  # pp similar_lines
+  lines = lines.sort_by { |line| opposite_lines[line].try(&.size) || 0 }.reverse
 
-  # return
+  potential_lines = lines.select { |line| perpendicular_lines[line].size > 0 && opposite_lines[line].size > 0 }
+
   # assume number of lines >= 3
-  midpoint = lines.size // 2
-  l1 = lines[midpoint - 1]
-  l2 = lines[midpoint + 1]
-  l3 = lines[midpoint]
+  # midpoint = lines.size // 2
+  # l1 = lines[midpoint - 1]
+  # l2 = lines[midpoint + 1]
+  # l3 = lines[midpoint]
+  l1 = potential_lines.last
+  l2 = opposite_lines[l1].first
+  l3 = perpendicular_lines[l1].first
 
   puts "Using lines: #{l1}\n#{l2}\n#{l3}"
 
@@ -444,15 +443,19 @@ def find_proportional_iteration(lines, l1, l2, l3) : Line?
         puts "!  found a line! (#{dist2}) - i #{i}, j #{j}"
         exact = 0
         close = 0
+        distance_sum = 0f64
+
         lines.each do |other|
+          distance = refined_line.skew_lines_distance(other)
+          distance_sum += distance
           int = refined_line.intersection(other)
           if !int.nil?
             exact += 1
-          elsif refined_line.skew_lines_distance(other) < 1.0
+          elsif distance < 1.0
             close += 1
           end
         end
-        puts "   (exact intersections: #{exact}, close: #{close})"
+        puts "   (exact intersections: #{exact}, close: #{close}, average distance: #{distance_sum / lines.size})"
         matches << refined_line
         # return refined_line
       end
@@ -624,12 +627,13 @@ def write_throw_line(line, file)
   file.flush
 end
 
-def get_plotter(all_vectors_file, target_vectors_file, drawn_line_file)
+def get_plotter(all_vectors_file, target_vectors_file, drawn_line_file, fit_line_file)
   plot_command = <<-PLOT
   set term qt 0
   splot '#{all_vectors_file.path}' using 1:2:3:($4*400000000000):($5*400000000000):($6*400000000000) with vector, \\
   '#{target_vectors_file.path}' using 1:2:3:($4*400000000000):($5*400000000000):($6*400000000000) with vector, \\
-  '#{drawn_line_file.path}' with linespoints linewidth 2
+  '#{drawn_line_file.path}' with linespoints linewidth 2, \\
+  '#{fit_line_file.path}' with linespoints linewidth 2
 
   PLOT
   Gnuplot::Control.new(plot_command)
@@ -669,22 +673,26 @@ def interactive_intersection_finder(lines, l1, l2, l3)
   # pos1 = Vec3.new(343687771508360f64, 289992578065459f64, 319549392507162f64) # found via gnuplot method
   # pos2 = Vec3.new(236645926609322f64, 253593827042829f64, 190995920643689f64)
   throw_line = Line.new(pos1.clone, pos2.clone)
+  fitted_line = fit_line(lines, show_plot: true)
   vec1 = l1.direction
   vec2 = l2.direction
   found = false
 
   all_vec_file, target_vec_file = create_vector_files(lines, l1, l2, l3)
   throw_line_file = File.tempfile("24_throw_line", ".dat")
+  fit_line_file = File.tempfile("24_fit_line", ".dat")
 
   write_throw_line(throw_line, throw_line_file)
+  write_throw_line(fitted_line, fit_line_file)
 
-  gnuplot = get_plotter(all_vec_file, target_vec_file, throw_line_file)
+  gnuplot = get_plotter(all_vec_file, target_vec_file, throw_line_file, fit_line_file)
 
   positions =         [pos1, pos2]
   offsets =           [738973779950u64, 218999979956u64] #[0u64, 0u64] # 
   initial_positions = [pos1, pos2]
   vectors =           [vec1, vec2]
-  distance = throw_line.skew_lines_distance(l3)
+  distance1 = throw_line.skew_lines_distance(l3)
+  distance2 = average_distance(throw_line, lines)
   active_pos = 0 # or 1
   magnitude = 1000000000u64
   should_exit = false
@@ -717,13 +725,15 @@ def interactive_intersection_finder(lines, l1, l2, l3)
   input.loop do
     if should_exit
       throw_line_file.delete
+      fit_line_file.delete
       all_vec_file.delete
       target_vec_file.delete
       gnuplot.close
-      return throw_line, distance, offsets[0], offsets[1]
+      return throw_line, distance1, offsets[0], offsets[1]
     end
     throw_line = Line.new(positions[0], positions[1])
-    distance = throw_line.skew_lines_distance(l3)
+    distance1 = throw_line.skew_lines_distance(l3)
+    distance2 = average_distance(throw_line, lines)
     write_throw_line(throw_line, throw_line_file)
     puts <<-STATUS
     Status:
@@ -731,9 +741,52 @@ def interactive_intersection_finder(lines, l1, l2, l3)
       pos1: #{positions[0]}
       pos2: #{positions[1]}
       offsets: #{offsets[0]} #{offsets[1]}
-      distance: #{distance}
+      distance1: #{distance1}
+      avg:       #{distance2}
       multiplier: #{magnitude}
     STATUS
     gnuplot.replot
   end
+end
+
+def fit_line(lines, show_plot : Bool)
+  # find a new line that approximately intersects the provided lines/vectors
+  # inspired by https://zalo.github.io/blog/line-fitting/
+  # (https://zalo.github.io/assets/js/LineFitting/LineFitting.js)
+
+  # sample points along each line to find an average center point to use
+  # as an initial 
+  samples = [] of Vec3
+  centroid = Vec3.zero
+  lines.each do |line|
+    vec = line.direction
+    10.times do |i|
+      scalar = i * 100000000000.0 # should allow most hailstones to cross their point of intersection
+      sample = (line.p + (vec * scalar) )
+      samples << sample
+      centroid = centroid + sample # this will get quite large
+    end
+  end
+  centroid = centroid * (1.0 / samples.size) # haven't implemented vector division :|
+
+  # figure out a line
+  normalized_direction = Vec3.new(1.0, 0.0, 0.0)
+  next_direction = Vec3.zero
+  samples.each do |point|
+    centered_point = point - centroid
+    next_direction = next_direction + centered_point * centered_point.dot(normalized_direction)
+  end
+  normalized_direction = next_direction.normalize
+
+  PlottingExtras.fit_line(samples, centroid, normalized_direction) if show_plot
+
+  Line.new(centroid - normalized_direction * 250000000000000.0, centroid + normalized_direction * 70000000000000.0)
+end
+
+def average_distance(new_line, lines)
+  sum = 0f64
+  lines.each do |line|
+    sum += new_line.skew_lines_distance(line)
+  end
+  sum / lines.size
 end

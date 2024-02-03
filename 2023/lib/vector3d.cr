@@ -7,6 +7,10 @@ class Vector3d(T)
   def initialize(@x : T, @y : T, @z : T)
   end
 
+  def self.zero
+    new(0.0, 0.0, 0.0)
+  end
+
   def +(other)
     Vector3d(T).new(
       @x + other.x,
