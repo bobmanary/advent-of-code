@@ -65,7 +65,7 @@ def reconstruct_path(came_from : Hash(MapNode, MapNode?), start : MapNode, goal 
     path << current
     current = came_from[current].as(MapNode)
   end
-  path << start
+  # path << start
   path.reverse
 end
 
@@ -92,13 +92,13 @@ def parse(filename)
       id += 1
     end
 
+    graph.add(nodes)
+
     nodes.each do |node, x, y|
-      nodes.neighbors(x, y).each do |nb|
+      nodes.neighbors(x, y, 3).each do |(nb, edge_cost)|
         node.add_edge(nb)
       end
     end
-
-    graph.add(nodes)
   end
 
   return graph, width, height
@@ -113,6 +113,10 @@ class Graph
   def add(other : Matrix)
     @nodes.concat(other.array)
     self
+  end
+
+  def add(other : MapNode)
+    @nodes << other
   end
 
   def each(&block)
