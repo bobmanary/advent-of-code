@@ -1,70 +1,37 @@
 require "./lib/matrix"
 require "./lib/asciimage"
-
-class Vector
-  property x, y : Int32
-  def_hash @x, @y
-
-  def initialize(@x : Int32, @y : Int32)
-  end
-
-  def +(other)
-    Vector.new(
-      @x + other.x,
-      @y + other.y
-    )
-  end
-
-  def add_if_bounded_by(bounding_corner : Vector, other : Vector) : Vector | Nil
-    new_x = @x + other.x
-    new_y = @y + other.y
-    if new_x >= 0 && new_y >= 0 && new_x <= bounding_corner.x && new_y <= bounding_corner.y
-      Vector.new(new_x, new_y)
-    else
-      nil
-    end
-  end
-
-  def ==(other)
-    @x == other.x && @y == other.y
-  end
-
-  def clone
-    Vector.new(@x, @y)
-  end
-end
-
-NORTH = Vector.new(0, -1)
-EAST = Vector.new(1, 0)
-SOUTH = Vector.new(0, 1)
-WEST = Vector.new(-1, 0)
+require "./lib/vector2d"
+NORTH = Vector2d(Int32).new(0, -1)
+EAST = Vector2d(Int32).new(1, 0)
+SOUTH = Vector2d(Int32).new(0, 1)
+WEST = Vector2d(Int32).new(-1, 0)
 
 def parse(filename)
   lines = File.read(filename).lines
   width = lines.first.size
   height = lines.size
-  start = Vector.new(-1, -1)
+  start = Vector2d(Int32).new(-1, -1)
 
   array = Array(Char).new(width * height)
   lines.each_with_index do |line, y|
     array.concat line.chars
     start_pos = line.index('S')
     next if start_pos.nil?
-    start = Vector.new(start_pos, y)
+    start = Vector2d(Int32).new(start_pos, y)
   end
   return Matrix(Char).new(array, width, height), start
 end
 
 def part1(map, start_position, steps_remaining)
-  bounds = Vector.new(map.width - 1, map.height - 1)
+  bounds = Vector2d(Int32).new(map.width - 1, map.height - 1)
 
-  cache = Hash(Tuple(Vector, Int32), Set(Vector)).new
+  cache = Hash(Tuple(Vector2d(Int32), Int32), Set(Vector2d(Int32))).new
 
-  reached_plots = walk(map, bounds, start_position, steps_remaining, Set(Vector).new, cache)
+  reached_plots = walk(map, bounds, start_position, steps_remaining, Set(Vector2d(Int32)).new, cache)
   reached_plots
 end
 
-def walk(map : Matrix(Char), bounds, position : Vector, steps_remaining : Int32, reached_plots : Set(Vector), cache)
+def walk(map : Matrix(Char), bounds, position : Vector2d(Int32), steps_remaining : Int32, reached_plots : Set(Vector2d(Int32)), cache)
   if steps_remaining == 0
     reached_plots << position
     return reached_plots
