@@ -1,3 +1,5 @@
+require "./lib/gnuplot"
+
 module PlottingExtras
   def self.fit_line(samples, centroid, normalized_direction)
     samples_file = File.tempfile("24_samples", ".dat")

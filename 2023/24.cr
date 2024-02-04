@@ -380,6 +380,9 @@ def find_interactively(lines, l1, l2, l3) : Line?
   lines = lines - [l1, l2, l3]
 
   throw_line, distance, offset1, offset2 = interactive_intersection_finder(lines, l1, l2, l3)
+  tl_dir = throw_line.direction
+  throw_line.p = throw_line.p - tl_dir
+  throw_line.q = throw_line.q + tl_dir
   pos1 = l1.p + l1.direction * offset1.to_f64
   pos2 = l2.p + l2.direction * offset2.to_f64
 
@@ -392,6 +395,16 @@ def find_interactively(lines, l1, l2, l3) : Line?
   Beginning iterative search for exact match...
 
   MSG
+
+  all_vec_file, target_vec_file = create_vector_files(lines, l1, l2, l3)
+  throw_line_file = File.tempfile("24_throw_line", ".dat")
+  fit_line_file = File.tempfile("24_fit_line", ".dat")
+
+  write_throw_line(throw_line, throw_line_file)
+
+  gnuplot = get_plotter(all_vec_file, target_vec_file, throw_line_file, fit_line_file)
+
+
 
   throw_line.p = pos1
   throw_line.q = pos2
@@ -417,6 +430,11 @@ def find_interactively(lines, l1, l2, l3) : Line?
       dist2 = refined_line.skew_lines_distance(l3)
       if dist2 < 0.00001
         puts "!  found a line! (#{dist2}) - i #{i}, j #{j}"
+        rl_dir = refined_line.direction
+        refined_line.q = refined_line.q + rl_dir
+        refined_line.p = refined_line.p - rl_dir
+        write_throw_line(refined_line, throw_line_file, truncate: false)
+        gnuplot.replot
         exact = 0
         close = 0
         distance_sum = 0f64
@@ -441,12 +459,18 @@ def find_interactively(lines, l1, l2, l3) : Line?
     puts "   #{min_dist}  #{gmin}  (#{i})" if i % 250 == 0 || min_dist < 0.02
   end
 
+  all_vec_file.delete
+  target_vec_file.delete
+  throw_line_file.delete
+  fit_line_file.delete
+
   puts "\nall matching lines:"
   matches.each_with_index do |line, i|
     puts "#{i}: #{line}"
   end
   puts "\npick a line by index:"
   match_id = STDIN.gets.as(String)
+  gnuplot.close
   return matches[match_id.chomp.to_i]
 end
 
@@ -467,15 +491,17 @@ def create_vector_files(lines, l1, l2, l3)
   {all_file, target_file}
 end
 
-def write_throw_line(line, file)
+def write_throw_line(line, file, truncate = true)
   p1 = line.p
   p2 = line.q
   if p1.magnitude > p2.magnitude
     line = Line.new(p2, p1)
   end
-  file.rewind
-  file.truncate
-  file.print "#{line.p}\n#{line.p + line.direction * 2.0}"
+  if truncate
+    file.rewind
+    file.truncate
+  end
+  file.print "#{line.p}\n#{line.p + line.direction * 2.0}\n\n"
   file.flush
 end
 
