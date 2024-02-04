@@ -8,12 +8,12 @@ alias Vec3 = Vector3d(Float64)
 [
   # {"inputs/24_example.txt", 7f64, 27f64, 10f64, false},
   {"inputs/24.txt", 200000000000000f64, 400000000000000f64, 2600000000000f64, true}
-].each do |(filename, test_area_min, test_area_max, max_iterations, use_proportional_iteration)|
+].each do |(filename, test_area_min, test_area_max, max_iterations, use_interactive)|
   input = File.read(filename)
   lines = parse(input)
   # puts "#{filename} part 1: #{part1(lines, test_area_min, test_area_max)}"
 
-  part2(lines, test_area_max, max_iterations, use_proportional_iteration)
+  part2(lines, test_area_max, max_iterations, use_interactive)
 end
 
 
@@ -237,29 +237,7 @@ def part1(lines, test_area_min, test_area_max)
   intersections
 end
 
-def part2(lines, boundary_max, max_iterations, use_proportional_iteration : Bool = false)
-
-  
-  # p1 = Vec3.new(24.0, 13, 10.0)
-  # p2 = p1 + Vec3.new(-3.0, 1.0, 2.0)
-  # throw_line = Line.new(p1, p2)
-  
-  # lines.each_with_index do |l1|
-  #   puts "\n\n"
-  
-  #   intersection = l1.intersection(throw_line)
-  #   if intersection.nil?
-  #     puts "false @ #{intersection}"
-  #   else
-  #     puts "true @ #{intersection}"
-  #   end
-  # end
-  
-  # sort lines by midpoint (probably good enough), then select, first, last and middle
-  # line and iterate through points on lines 1 and 2 until arriving at a "throw" line
-  # that intersects all 3
-  
-  # lines = lines.sort { |a, b| a.segment_midpoint <=> b.segment_midpoint }
+def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
 
   opposite_lines = Hash(Line, Array(Line)).new
   perpendicular_lines = Hash(Line, Array(Line)).new
@@ -289,11 +267,11 @@ def part2(lines, boundary_max, max_iterations, use_proportional_iteration : Bool
 
   puts "Using lines: #{l1}\n#{l2}\n#{l3}"
 
-  if use_proportional_iteration
-    puts "use proportional"
-    throw_line = find_proportional_iteration(lines, l1, l2, l3)
+  if use_interactive
+    puts "use interactive method"
+    throw_line = find_interactively(lines, l1, l2, l3)
   else
-    puts "use full"
+    puts "use full search"
     throw_line = find_full_iteration(l1, l2, l3, boundary_max)
   end
 
@@ -392,10 +370,8 @@ def time_at_position(line, position)
   (m_intersection / m_step).round.to_i64
 end
 
-def find_proportional_iteration(lines, l1, l2, l3) : Line?
-  # scan points between l1 and l2 until the resulting line intersects with l3,
-  # using a PID controller to converge on an intersection without having to
-  # iterate through every point
+def find_interactively(lines, l1, l2, l3) : Line?
+  # use a gnuplot/terminal-based interactive method of finding a matching line
 
   i = 0
   j = 0
@@ -472,130 +448,6 @@ def find_proportional_iteration(lines, l1, l2, l3) : Line?
   puts "\npick a line by index:"
   match_id = STDIN.gets.as(String)
   return matches[match_id.chomp.to_i]
-  puts "\n\n"
-
-
-
-  pos1 = l1.p.clone
-  pos2 = l2.p.clone
-  throw_line = Line.new(pos1.clone, pos2.clone)
-  vec1 = l1.direction
-  vec2 = l2.direction
-  found = false
-  i = 0
-  j = 0
-  next_multiplier = 1
-
-  debug_vec_multiplier = 2000000000f64
-  format_divisor = 0.00000000001f64
-  format_divisor = 1f64
-  format_vec_mult = 1000000000000f64
-  pos1 = pos1 + vec1 * (478 * debug_vec_multiplier)
-  debug_vec_multiplier = 100000000f64
-  pos1 = pos1 + vec1 * (107 * debug_vec_multiplier)
-  debug_vec_multiplier = 50000000f64
-  pos1 = pos1 + vec1 * (45 * debug_vec_multiplier)
-  debug_vec_multiplier = 10000000f64
-  pos1 = pos1 + vec1 * (140 * debug_vec_multiplier)
-  debug_vec_multiplier = 1000000f64
-  pos1 = pos1 + vec1 * (468 * debug_vec_multiplier)
-  debug_vec_multiplier = 100000f64
-  pos1 = pos1 + vec1 * (436 * debug_vec_multiplier)
-  debug_vec_multiplier = 10000f64
-  pos1 = pos1 + vec1 * (464 * debug_vec_multiplier)
-  debug_vec_multiplier = 1000f64 
-  pos1 = pos1 + vec1 * (732 * debug_vec_multiplier)
-  debug_vec_multiplier = 100f64
-  pos1 = pos1 + vec1 * (753 * debug_vec_multiplier)
-  debug_vec_multiplier = 10f64
-  pos1 = pos1 + vec1 * (10 * debug_vec_multiplier)
-  debug_vec_multiplier = 1f64
-
-  # puts "#{l1.p * format_divisor} #{l1.direction * format_vec_mult}"
-  # puts "#{l2.p * format_divisor} #{l2.direction * format_vec_mult}"
-  # puts "#{l3.p * format_divisor} #{l3.direction * format_vec_mult}"
-  # puts "\n\n"
-  records = Array({Float64, Float64}).new
-
-  File.open("temp/pid.dat", "w") do |file|
-    1200.times do
-      pos2 = l2.p.clone
-      # puts "#{i} scanning from l1 (#{l1}) at #{pos1}"
-      pid = PidController.new(0.125, 1, 0.5)
-      first = true
-      prev_distance = 0f64
-      min = Float64::MAX
-      max = Float64::MIN
-      100.times do
-        throw_line = Line.new(pos1, pos2)
-        distance = throw_line.skew_lines_distance(l3)
-        min = Math.min(distance, min)
-        max = Math.max(distance, max)
-        records << {min, max}
-        # file.print "#{i} #{distance}\n"
-        file.print "#{throw_line.p}\n#{throw_line.q}\n\n\n"
-        if distance <= 0.00001
-          puts "found #{pos1} <-> #{pos2} intersection with l3"
-          found = true
-          break
-        end
-        i += 1
-        # puts "#{i.to_s.rjust(4)}:    #{pos1.to_s.ljust(55)} #{pos2.to_s.ljust(80)}   #{distance.format(decimal_places: 1).rjust(26)}   #{next_multiplier.format(decimal_places: 1).rjust(26)}"
-        next_multiplier = pid.update(i, distance, 0f64)
-        # pos2 = pos2 + vec2 * -next_multiplier
-        pos2 = pos2 + vec2 * debug_vec_multiplier
-        first = false
-        prev_distance = distance
-        if first == false && distance > prev_distance
-          break
-        end
-        # if i % 10000 == 0
-        # end
-        # put some sort of breaker in here to check if the pid controller is causing
-        # oscillations
-      end
-      puts "#{j} #{pos1} #{pos2} #{min}"
-      j += 1
-      break if found
-      pos1 = pos1 + vec1 * debug_vec_multiplier
-    end
-  end
-
-  if found
-    return throw_line
-  else
-    return nil
-  end
-end
-
-class PidController
-  @proportional_gain : Float64
-  @integral_gain : Float64
-  @derivative_gain : Float64
-  @integration_stored : Float64 = 0.0
-  @error_last : Float64 = 1
-
-
-  def initialize(@proportional_gain : Float64, @integral_gain : Float64, @derivative_gain : Float64)
-  end
-
-  def update(dt, current, target)
-    error = target - current
-
-    p = @proportional_gain * error
-
-    error_rate_of_change = (error - @error_last) / dt
-    @error_last = error
-    d = @derivative_gain * error_rate_of_change
-
-    @integration_stored = @integration_stored + (error * dt)
-    i = @integral_gain * @integration_stored
-
-    # puts "target: #{target}, current: #{current}, p#{p} i#{i} d#{d}"
-    p + i + d
-
-  end
-
 end
 
 def create_vector_files(lines, l1, l2, l3)
