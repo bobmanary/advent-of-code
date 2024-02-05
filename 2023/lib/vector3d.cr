@@ -109,4 +109,11 @@ class Vector3d(T)
     radians = Math.acos(dot(other) / (m_a * m_b))
     radians * (180/Math::PI)
   end
+
+  def snap_to_integer!
+    @x = @x.round
+    @y = @y.round
+    @z = @z.round
+    self
+  end
 end

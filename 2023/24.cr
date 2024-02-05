@@ -5,14 +5,15 @@ require "./lib/input_loop"
 require "./24_plotting_extras"
 
 [
-  # {"inputs/24_example.txt", 7f64, 27f64, 10f64, false},
+  {"inputs/24_example.txt", 7f64, 27f64, 10f64, false},
   {"inputs/24.txt", 200000000000000f64, 400000000000000f64, 2600000000000f64, true}
-].each do |(filename, test_area_min, test_area_max, max_iterations, use_interactive)|
+].each do |(filename, test_area_min, test_area_max, max_iterations, use_proportional)|
   input = File.read(filename)
   lines = parse(input)
-  # puts "#{filename} part 1: #{part1(lines, test_area_min, test_area_max)}"
+  puts "#{filename} part 1: #{part1(lines, test_area_min, test_area_max)}"
 
-  part2(lines, test_area_max, max_iterations, use_interactive)
+  p2 = part2(lines, test_area_max, max_iterations, use_proportional)
+  puts "#{filename} part 2: #{p2}"
 end
 
 def parse(input)
@@ -71,7 +72,7 @@ def part1(lines, test_area_min, test_area_max)
   intersections
 end
 
-def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
+def part2(lines, boundary_max, max_iterations, use_proportional : Bool = false)
 
   opposite_lines = Hash(Line, Array(Line)).new
   perpendicular_lines = Hash(Line, Array(Line)).new
@@ -95,28 +96,24 @@ def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
   # l1 = lines[midpoint - 1]
   # l2 = lines[midpoint + 1]
   # l3 = lines[midpoint]
-  l1 = potential_lines.last
-  l2 = opposite_lines[l1].first
-  l3 = perpendicular_lines[l1].first
-  l4 = perpendicular_lines[l1].last
-  l5 = opposite_lines[l1].last
 
-  throw_line = find_proportional(l1, l2, l3, l4, l5, lines)
-  # return
+  if use_proportional
+    l1 = potential_lines.last
+    l2 = opposite_lines[l1].first
+    l3 = perpendicular_lines[l1].first
+    l4 = perpendicular_lines[l1].last
+    l5 = opposite_lines[l1].last
+    throw_line = find_proportional(l1, l2, l3, l4, l5, lines)
+  else
+    l1 = lines[0]
+    l2 = lines[1]
+    l3 = lines[2]
+    throw_line = find_full_iteration(l1, l2, l3, boundary_max)
+  end
 
-  # puts "Using lines: #{l1}\n#{l2}\n#{l3}\n#{l4}"
-
-  # if use_interactive
-  #   puts "use interactive method"
-  #   throw_line = find_interactively(lines, l1, l2, l3, l4)
-  # else
-  #   puts "use full search"
-  #   throw_line = find_full_iteration(l1, l2, l3, boundary_max)
-  # end
-
-  # if throw_line.nil?
-  #   raise "oh no! couldn't find an intersection in time"
-  # end
+  if throw_line.nil?
+    raise "oh no! couldn't find an intersection"
+  end
 
   # extend the throw line's first point so that
   # it covers any input lines that would intersect
@@ -155,37 +152,28 @@ def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
     end
   end
 
-  i1 = l1.intersection(throw_line)
-  i2 = l2.intersection(throw_line)
   if no_intersections > 0
     puts "#{no_intersections} lines did not have an intersection, try again?"
     exit 1
   end
 
+  lines = lines.sort_by { |line| time_at_position(line, intersections[line]) }
 
+  puts "---"
+  l1 = lines[0]
+  l2 = lines[1]
+  time_interval = time_at_position(l2, intersections[l2]) - time_at_position(l1, intersections[l1])
+  distance = (intersections[l2] - intersections[l1]).magnitude
+  speed = distance / time_interval
+  puts "speed: #{speed}"
 
-  t1 = time_at_position(l1, i1.as(Vec3))
-  t2 = time_at_position(l2, i2.as(Vec3))
+  vector = (throw_line.direction.normalize * speed).snap_to_integer!
+  puts "direction: #{vector}"
 
-  d1 = throw_line.direction
-  lcm = d1.x.to_i64.lcm(d1.y.to_i64).lcm(d1.z.to_i64)
-  puts d1.x / d1.y
-  puts d1
-  puts "#{d1.x.to_i64}  = #{d1.y.to_i64}  = #{d1.z.to_i64}"
-  puts lcm
-  # puts lcm([d1.x.to_i64, d1.y.to_i64, d1.z.to_i64])
-  puts t1
-  puts t2
-
-  lines.sort_by! { |line| time_at_position(line, intersections[line]) }
+  initial_position = intersections[l1] - vector * time_at_position(l1, intersections[l1]).to_f64
+  puts "initial position: #{initial_position} (#{time_at_position(l1, intersections[l1])}ns)"
+  initial_position.x.to_i64 + initial_position.y.to_i64 + initial_position.z.to_i64
 end
-
-# def lcm(numbers)
-#   a = numbers[0]
-#   return a if numbers.size == 1
-#   b = lcm(numbers[1..])
-#   a.lcm(b)
-# end
 
 
 def find_full_iteration(l1, l2, l3, boundary_max) : Line?
