@@ -88,7 +88,7 @@ def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
 
   lines = lines.sort_by { |line| opposite_lines[line].try(&.size) || 0 }.reverse
 
-  potential_lines = lines.select { |line| perpendicular_lines[line].size > 0 && opposite_lines[line].size > 0 }
+  potential_lines = lines.select { |line| perpendicular_lines[line].size > 1 && opposite_lines[line].size > 1 }
 
   # assume number of lines >= 3
   # midpoint = lines.size // 2
@@ -98,20 +98,25 @@ def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
   l1 = potential_lines.last
   l2 = opposite_lines[l1].first
   l3 = perpendicular_lines[l1].first
+  l4 = perpendicular_lines[l1].last
+  l5 = opposite_lines[l1].last
 
-  puts "Using lines: #{l1}\n#{l2}\n#{l3}"
+  throw_line = find_proportional(l1, l2, l3, l4, l5, lines)
+  # return
 
-  if use_interactive
-    puts "use interactive method"
-    throw_line = find_interactively(lines, l1, l2, l3)
-  else
-    puts "use full search"
-    throw_line = find_full_iteration(l1, l2, l3, boundary_max)
-  end
+  # puts "Using lines: #{l1}\n#{l2}\n#{l3}\n#{l4}"
 
-  if throw_line.nil?
-    raise "oh no! couldn't find an intersection in time"
-  end
+  # if use_interactive
+  #   puts "use interactive method"
+  #   throw_line = find_interactively(lines, l1, l2, l3, l4)
+  # else
+  #   puts "use full search"
+  #   throw_line = find_full_iteration(l1, l2, l3, boundary_max)
+  # end
+
+  # if throw_line.nil?
+  #   raise "oh no! couldn't find an intersection in time"
+  # end
 
   # extend the throw line's first point so that
   # it covers any input lines that would intersect
@@ -126,34 +131,62 @@ def part2(lines, boundary_max, max_iterations, use_interactive : Bool = false)
   throw_line.q = throw_line.q + vec
   puts throw_line
 
-
-  # wtf = [l1, l2, l3]
-  File.open("temp/24_distances.dat", "w") do |file|
-    lines.each_with_index do |l1|
-      intersection = l1.intersection(throw_line)
-      if intersection.nil?
-        # puts "no intersection (distance: #{l1.skew_lines_distance(throw_line)})"
-        np1, np2 = l1.nearest_points(throw_line)
-        dist = (np2 - np1).magnitude
-        # puts "                           #{Line.new(np1, np2).direction.magnitude}"
-        if np1 == np2 || dist < 1.0
-          puts "? found a close match at #{np2} (#{dist})"
-          puts "     with line: #{l1}"
-        else
-          puts "-  #{dist}"
-        end
-        file.print("#{np1}\n#{np2}\n")
+  intersections = Hash(Line, Vec3).new
+  no_intersections = 0
+  lines.each_with_index do |l1|
+    intersection = l1.intersection(throw_line)
+    if intersection.nil?
+      np1, np2 = l1.nearest_points(throw_line) # wasteful, intersection also calls this
+      dist = (np2 - np1).magnitude
+      # skew line distance and nearest points magnitude return different values
+      # due to floating point shenanigans. check both
+      if np1 == np2 || dist < 0.1 || l1.skew_lines_distance(throw_line) < 0.1
+        intersections[l1] = np2
+        # puts "? found a close match at #{np2} (#{dist} or #{dist2})"
+        # puts "     with line: #{l1}"
       else
-        puts "! intersection at #{intersection}, time: #{time_at_position(l1, intersection)}ns"
-        puts "    line: #{l1}"
+        no_intersections += 1
+        # puts "-  #{dist}, #{dist2}"
       end
+    else
+      intersections[l1] = intersection
+      # puts "! intersection at #{intersection}, time: #{time_at_position(l1, intersection)}ns"
+      # puts "    line: #{l1}"
     end
   end
 
   i1 = l1.intersection(throw_line)
   i2 = l2.intersection(throw_line)
+  if no_intersections > 0
+    puts "#{no_intersections} lines did not have an intersection, try again?"
+    exit 1
+  end
 
+
+
+  t1 = time_at_position(l1, i1.as(Vec3))
+  t2 = time_at_position(l2, i2.as(Vec3))
+
+  d1 = throw_line.direction
+  lcm = d1.x.to_i64.lcm(d1.y.to_i64).lcm(d1.z.to_i64)
+  puts d1.x / d1.y
+  puts d1
+  puts "#{d1.x.to_i64}  = #{d1.y.to_i64}  = #{d1.z.to_i64}"
+  puts lcm
+  # puts lcm([d1.x.to_i64, d1.y.to_i64, d1.z.to_i64])
+  puts t1
+  puts t2
+
+  lines.sort_by! { |line| time_at_position(line, intersections[line]) }
 end
+
+# def lcm(numbers)
+#   a = numbers[0]
+#   return a if numbers.size == 1
+#   b = lcm(numbers[1..])
+#   a.lcm(b)
+# end
+
 
 def find_full_iteration(l1, l2, l3, boundary_max) : Line?
   # scan every point between l1 and l2 until the resulting line intersects with l3
@@ -204,7 +237,7 @@ def time_at_position(line, position)
   (m_intersection / m_step).round.to_i64
 end
 
-def find_interactively(lines, l1, l2, l3) : Line?
+def find_interactively(lines, l1, l2, l3, l4) : Line?
   # use a gnuplot/terminal-based interactive method of finding a matching line
 
   i = 0
@@ -213,7 +246,7 @@ def find_interactively(lines, l1, l2, l3) : Line?
 
   lines = lines - [l1, l2, l3]
 
-  throw_line, distance, offset1, offset2 = interactive_intersection_finder(lines, l1, l2, l3)
+  throw_line, distance, offset1, offset2 = interactive_intersection_finder(lines, l1, l2, l3, l4)
   tl_dir = throw_line.direction
   throw_line.p = throw_line.p - tl_dir
   throw_line.q = throw_line.q + tl_dir
@@ -308,19 +341,20 @@ def find_interactively(lines, l1, l2, l3) : Line?
   return matches[match_id.chomp.to_i]
 end
 
-def create_vector_files(lines, l1, l2, l3)
+def create_vector_files(lines, l1, l2, l3, l4 : Line? = nil)
   all_file = File.tempfile("24_allvectors", ".dat")
   lines.each do |line|
-    next if line == l1 || line == l2 || line == l3
+    next if line == l1 || line == l2 || line == l3 || (!l4.nil? && line == l4)
     all_file.print "#{line.q} #{line.direction}\n"
   end
   all_file.flush
 
   target_file = File.tempfile("24_targetvectors", ".dat")
 
-  target_file.print "#{l1.q} #{l1.direction}\n"
-  target_file.print "#{l2.q} #{l2.direction}\n"
-  target_file.print "#{l3.q} #{l3.direction}\n"
+  target_file.print "#{l1.p} #{l1.direction}\n"
+  target_file.print "#{l2.p} #{l2.direction}\n"
+  target_file.print "#{l3.p} #{l3.direction}\n"
+  target_file.print "#{l4.p} #{l4.direction}\n" if !l4.nil?
   target_file.flush
   {all_file, target_file}
 end
@@ -367,7 +401,7 @@ def min(a : UInt64, b : UInt64) : UInt64
   end
 end
 
-def interactive_intersection_finder(lines, l1, l2, l3)
+def interactive_intersection_finder(lines, l1, l2, l3, l4)
   puts <<-HELP
   GNUPLOT INTERACTIVE LINE INTERSECTION FINDER
   Uses Gnuplot to visualize line intersections in 3D.
@@ -466,33 +500,57 @@ def fit_line(lines, show_plot : Bool)
   # inspired by https://zalo.github.io/blog/line-fitting/
   # (https://zalo.github.io/assets/js/LineFitting/LineFitting.js)
 
+  line_closest_points = [] of Vec3
+
   # sample points along each line to find an average center point to use
   # as an initial 
-  samples = [] of Vec3
-  centroid = Vec3.zero
-  lines.each do |line|
-    vec = line.direction
-    10.times do |i|
-      scalar = i * 100000000000.0 # should allow most hailstones to cross their point of intersection
-      sample = (line.p + (vec * scalar) )
-      samples << sample
-      centroid = centroid + sample # this will get quite large
+  outer_iterations = 11
+  samples_per_line = 10
+  approx_line = Line.new(Vec3.zero, Vec3.zero)
+  distance_multiplier = 100000000000f64
+
+  outer_iterations.times do |i|
+    offset_from_start = line_closest_points.empty?
+    samples = [] of Vec3
+    centroid = Vec3.zero
+    distance_multiplier = (10f64 ** (outer_iterations-i)) # decrease by an order of magnitude each iteration
+    # distance_multiplier = distance_multiplier * 0.85 # decrease by 40% each iteration
+    puts distance_multiplier
+    lines.each_with_index do |line, j|
+      midpoint_distance = offset_from_start ? 0f64 : (line_closest_points[j] - line.p).magnitude
+      magnitude = line.direction.magnitude
+      vec = line.direction
+      distance_between_samples = 1f64 * distance_multiplier # reduce as the outer loop progresses
+      puts " #{distance_between_samples}" if j == 0
+      samples_per_line.times do |k|
+        scalar = if offset_from_start
+          k * distance_between_samples # should allow most hailstones to cross their point of intersection
+        else
+          (midpoint_distance - ((k - (samples_per_line//2)) * distance_between_samples)) / magnitude
+        end
+        sample = (line.p + (vec * scalar) )
+        samples << sample
+        centroid = centroid + sample # this will get quite large
+      end
     end
+    centroid = centroid * (1.0 / samples.size) # haven't implemented vector division :|
+
+    # figure out a line
+    normalized_direction = Vec3.new(1.0, 0.0, 0.0)
+    next_direction = Vec3.zero
+    samples.each do |point|
+      centered_point = point - centroid
+      next_direction = next_direction + centered_point * centered_point.dot(normalized_direction)
+    end
+    normalized_direction = next_direction.normalize
+    approx_line = Line.new(centroid - normalized_direction * 250000000000000.0, centroid + normalized_direction * 70000000000000.0)
+    line_closest_points = lines.map {|line| line.nearest_points(approx_line)[0]}
+
+    puts "average distance for line fitting: #{average_distance(approx_line, lines)}"
+    PlottingExtras.fit_line(samples, centroid, normalized_direction) if show_plot
+  
   end
-  centroid = centroid * (1.0 / samples.size) # haven't implemented vector division :|
-
-  # figure out a line
-  normalized_direction = Vec3.new(1.0, 0.0, 0.0)
-  next_direction = Vec3.zero
-  samples.each do |point|
-    centered_point = point - centroid
-    next_direction = next_direction + centered_point * centered_point.dot(normalized_direction)
-  end
-  normalized_direction = next_direction.normalize
-
-  PlottingExtras.fit_line(samples, centroid, normalized_direction) if show_plot
-
-  Line.new(centroid - normalized_direction * 250000000000000.0, centroid + normalized_direction * 70000000000000.0)
+  approx_line
 end
 
 def average_distance(new_line, lines)
@@ -501,4 +559,108 @@ def average_distance(new_line, lines)
     sum += new_line.skew_lines_distance(line)
   end
   sum / lines.size
+end
+
+def skew_lines_distance_alt(line1, line2)
+  p1, p2 = line1.nearest_points(line2)
+  (p1 - p2).magnitude
+end
+
+def multi_line_distance(distance1, distance2, line1, line2, line3, line4, line5) : Float64
+  line0 = Line.new(
+    line1.p + line1.direction.normalize * distance1,
+    line2.p + line2.direction.normalize * distance2
+  )
+  # line0.skew_lines_distance(line3) + line0.skew_lines_distance(line4) + line0.skew_lines_distance(line5)
+  skew_lines_distance_alt(line0, line3) + skew_lines_distance_alt(line0, line4) + skew_lines_distance_alt(line0, line5)
+end
+
+def find_proportional(line1, line2, line3, line4, line5, lines)
+  d1 = 1f64 # some distance down line1, starting at line1.p
+  d2 = 1f64
+  target = 0.001
+  proportion = 0.95
+  error = multi_line_distance(d1, d2, line1, line2, line3, line4, line5)
+  prev_error = Float64::MAX
+  subtract = false
+  e1_chain = e2_chain = no_change_chain = 0
+
+  # all_vec_file, target_vec_file = create_vector_files(lines, line1, line2, line3, line4)
+  # throw_line_file = File.tempfile("24_throw_line", ".dat")
+  # fit_line_file = File.tempfile("24_fit_line", ".dat")
+
+  # write_throw_line(Line.new(
+  #   line1.p + line1.direction.normalize * d1,
+  #   line2.p + line2.direction.normalize * d2
+  # ), throw_line_file)
+
+  # gnuplot = get_plotter(all_vec_file, target_vec_file, throw_line_file, fit_line_file)
+
+  sleep 2
+  while error > target
+    proportional_adjustment = error * proportion
+    # puts "#{error.round(6).to_s.rjust(20)} #{d1.round(4).to_s.rjust(20)} #{d2.round(4).to_s.rjust(20)} #{(error - prev_error).round(4).to_s.rjust(20)} #{proportional_adjustment.round(4).to_s.rjust(20)} #{e1_chain},#{e2_chain}"
+
+    adjusted_d1 = clamp(subtract ? d1 - proportional_adjustment : d1 + proportional_adjustment)
+    adjusted_d2 = clamp(subtract ? d2 - proportional_adjustment : d2 + proportional_adjustment)
+    # if no_change_chain > 5
+    #   puts "reset"
+    #   no_change_chain = 0
+    #   adjusted_d1 = adjusted_d1 * (1 - (rand * 0.00000001))
+    #   adjusted_d2 = adjusted_d2 * (1 - (rand * 0.00000001))
+    # end
+    e1 = multi_line_distance(adjusted_d1, d2, line1, line2, line3, line4, line5)
+    e2 = multi_line_distance(d1, adjusted_d2, line1, line2, line3, line4, line5)
+
+    if e1 < e2
+      e1_chain += 1
+    else
+      e2_chain += 1
+    end
+
+    if (e1 < e2 && e1_chain < 10) || e2_chain >= 10
+      d1 = adjusted_d1
+      prev_error = error
+      error = e1
+      e2_chain = 0
+    else
+      d2 = adjusted_d2
+      prev_error = error
+      error = e2
+      e1_chain = 0
+    end
+
+    subtract = error > prev_error
+    if error == prev_error
+      no_change_chain += 1 
+    else
+      no_change_chain = 0
+    end
+
+    # write_throw_line(Line.new(
+    #   line1.p + line1.direction.normalize * d1,
+    #   line2.p + line2.direction.normalize * d2
+    # ), throw_line_file)
+    # gnuplot.replot
+
+    # sleep 0.033
+  end
+
+  p1 = line1.p + line1.direction.normalize * d1
+  p2 = line2.p + line2.direction.normalize * d2
+  p1.x = p1.x.round
+  p1.y = p1.y.round
+  p1.z = p1.z.round
+  p2.x = p2.x.round
+  p2.y = p2.y.round
+  p2.z = p2.z.round
+  Line.new(p1, p2)
+end
+
+def clamp(n)
+  n < 0f64 ? 0f64 : n
+end
+
+def round(n)
+  n.round
 end
