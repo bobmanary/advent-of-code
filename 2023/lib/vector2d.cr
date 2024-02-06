@@ -12,6 +12,20 @@ class Vector2d(T)
     )
   end
 
+  def -(other)
+    Vector2d(T).new(
+      @x - other.x,
+      @y - other.y
+    )
+  end
+
+  def *(magnitude)
+    Vector2d(T).new(
+      @x * magnitude,
+      @y * magnitude
+    )
+  end
+
   def add_if_bounded_by(bounding_corner : Vector2d(T), other : Vector2d(T)) : Vector2d(T) | Nil
     new_x = @x + other.x
     new_y = @y + other.y
@@ -28,6 +42,21 @@ class Vector2d(T)
 
   def clone
     Vector2d(T).new(@x, @y)
+  end
+
+  def normalize
+    m = magnitude
+    @x /= m
+    @y /= m
+    self
+  end
+
+  def dot(other)
+    @x * other.x + @y * other.y
+  end
+
+  def magnitude
+    Math.sqrt(dot(self))
   end
 
   def to_s(io)

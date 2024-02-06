@@ -42,4 +42,31 @@ module Gnuplot
       end
     end
   end
+
+  class Control
+    @child_process : Process
+    # @command_file : File
+    def initialize(command)
+      # @command_file = File.tempfile("plot", ".gnu")
+      # @command_file.print(command)
+      # @command_file.flush
+      path = Process.find_executable("gnuplot")
+      raise "oh no" unless path.is_a?(String)
+      @child_process = Process.new(
+        path,
+        input: Process::Redirect::Pipe,
+        output: Process::Redirect::Inherit,
+        error: Process::Redirect::Inherit,
+      )
+      @child_process.input.print(command)
+    end
+
+    def replot
+      @child_process.input.print("replot\n")
+    end
+
+    def close
+      @child_process.input.print("quit\n")
+    end
+  end
 end
