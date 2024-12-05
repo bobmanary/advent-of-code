@@ -12,16 +12,8 @@ module Dfs(T)
   end
 
   def self.longest_path(source : T, nodes : Array(T))
-    stack = Array(T).new
     dist = Array(Int32).new(nodes.size, Int32::MIN) # dist = distance
-    visited = Array(Bool).new(nodes.size, false)
-
-    nodes.each do |node|
-      if !visited[node.id]
-        topological_sort(node, visited, stack)
-      end
-    end
-
+    stack = longest_path_nodes(nodes)
     dist[source.id] = source.weight
 
     while stack.size > 0
@@ -36,5 +28,18 @@ module Dfs(T)
     end
 
     dist.max
+  end
+
+  def self.longest_path_nodes(nodes : Array(T))
+    stack = Array(T).new
+    visited = Array(Bool).new(nodes.size, false)
+
+    nodes.each do |node|
+      if !visited[node.id]
+        topological_sort(node, visited, stack)
+      end
+    end
+
+    stack
   end
 end
