@@ -1,10 +1,18 @@
+require "benchmark"
+
 ["inputs/07_test.txt", "inputs/07.txt"].each do |filename|
   calibrations = parse(filename)
 
-  p1 = part1(calibrations)
-  puts "#{filename} part 1: #{p1}"
+  p1 = p2 = 0i64
 
-  p2 = part2(calibrations)
+  Benchmark.ips do |bm|
+    bm.report { p1 = part1(calibrations) }
+    bm.report { p2 = part2(calibrations) }
+  end
+  # p1 = part1(calibrations)
+  # p2 = part2(calibrations)
+
+  puts "#{filename} part 1: #{p1}"
   puts "#{filename} part 2: #{p2}"
 end
 
@@ -26,7 +34,7 @@ end
 
 def reduce(calibrations, concat_operator)
   calibrations.reduce(0i64) do |total_result, calibration|
-    if calc(calibration[:operands][0], calibration[:operands][1..], calibration[:expected], concat_operator)
+    if calc(calibration[:operands][0], calibration[:operands], 1, calibration[:operands].size - 1, calibration[:expected], concat_operator)
       total_result + calibration[:expected]
     else
       total_result
@@ -34,16 +42,16 @@ def reduce(calibrations, concat_operator)
   end
 end
 
-def calc(ongoing_result, operands, expected_result, concat_operator)
-  if operands.empty?
+def calc(ongoing_result, operands, op_index, op_max, expected_result, concat_operator)
+  if op_index > op_max
     return ongoing_result == expected_result
   end
-  return true if calc(ongoing_result * operands[0], operands[1..], expected_result, concat_operator) 
-  return true if calc(ongoing_result + operands[0], operands[1..], expected_result, concat_operator)
+  return true if calc(ongoing_result * operands[op_index], operands, op_index + 1, op_max, expected_result, concat_operator) 
+  return true if calc(ongoing_result + operands[op_index], operands, op_index + 1, op_max, expected_result, concat_operator)
   if concat_operator
     return true if calc(
-      concat(ongoing_result, operands[0]),
-      operands[1..], expected_result, concat_operator
+      concat(ongoing_result, operands[op_index]),
+      operands, op_index + 1, op_max, expected_result, concat_operator
     )
   end
   false
