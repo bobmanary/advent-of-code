@@ -36,6 +36,15 @@ class Vector2d(T)
     end
   end
 
+  def contained_by_rect?(a, b)
+    low_x = a.x < b.x ? a.x : b.x
+    low_y = a.y < b.y ? a.y : b.y
+    max_x = a.x > b.x ? a.x : b.x
+    max_y = a.y > b.y ? a.y : b.y
+
+    @x >= low_x && @x <= max_x && @y >= low_y && @y <= max_x
+  end
+
   def ==(other)
     @x == other.x && @y == other.y
   end
